@@ -1,0 +1,42 @@
+/* Task Manager: a focused four-list to-do workspace */
+.task-intro{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:24px 27px;margin-bottom:20px;border:1px solid #e6e3f5;border-radius:17px;background:linear-gradient(115deg,#fff 0%,#faf9ff 100%)}
+.task-intro h2{font-family:Manrope,sans-serif;color:#29283f;font-size:23px;letter-spacing:-.8px;margin:7px 0 5px}
+.task-intro p{color:#85859a;font-size:12px;line-height:1.6;margin:0}
+.task-intro-count{display:grid;grid-template-columns:auto auto;align-items:center;column-gap:9px;min-width:128px;padding:13px 15px;border-radius:13px;background:#f0edff;color:#6f5be8}
+.task-intro-count strong{font-family:Manrope,sans-serif;font-size:24px;line-height:1}
+.task-intro-count span{font-size:10px;font-weight:700}
+.task-intro-count i{grid-column:1/-1;margin-top:7px;font-style:normal;font-size:10px;color:#777099}
+.task-board{display:flex;flex-direction:column;gap:22px}
+.task-board-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.task-board-toolbar .search-box{max-width:340px;width:100%;background:#fff}
+.task-board-toolbar>span{font-size:10px;color:#9998ad}
+.task-horizon{padding:20px;border:1px solid #e8e7f1;border-radius:17px;background:rgba(255,255,255,.72)}
+.task-horizon.long_term{background:linear-gradient(145deg,#fff 0%,#fbfaff 100%)}
+.task-horizon-heading{display:flex;justify-content:space-between;align-items:center;gap:15px;margin:0 0 17px}
+.task-horizon-heading h2{font-family:Manrope,sans-serif;font-size:20px;letter-spacing:-.65px;color:#29283f;margin:6px 0}
+.task-horizon-heading p{margin:0;color:#8c8ba0;font-size:11px;line-height:1.5}
+.task-horizon-total{white-space:nowrap;border:1px solid #e6e1ff;background:#f6f4ff;color:#6f5be8;border-radius:9px;padding:8px 10px;font-size:10px;font-weight:700}
+.task-area-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.task-area-card{min-width:0;border:1px solid #ebeaf3;border-radius:14px;background:#fff;overflow:hidden;box-shadow:0 2px 8px rgba(45,38,92,.025)}
+.task-area-heading{display:flex;align-items:center;gap:10px;padding:15px 15px 13px;border-bottom:1px solid #f0eff6}
+.task-area-icon{display:grid;place-items:center;flex:0 0 35px;height:35px;border-radius:11px;background:#f0edff;color:#6f5be8;font-size:16px;font-weight:800}
+.task-area-icon.professional{background:#eaf3ff;color:#4786d8}
+.task-area-heading>div:nth-child(2){flex:1;min-width:0}
+.task-area-heading h3{font-size:12px;color:#34324d;margin:0 0 4px;font-weight:800}
+.task-area-heading p{font-size:10px;line-height:1.45;color:#9695a9;margin:0}
+.task-area-count{display:grid;place-items:center;min-width:25px;height:25px;padding:0 6px;border-radius:8px;background:#f6f5fb;color:#6f6a89;font-size:10px;font-weight:800}
+.task-area-list{padding:0 14px}
+.task-area-card .entry-row{gap:9px;padding:13px 0;align-items:flex-start}
+.task-area-card .entry-main h3{font-size:11px;line-height:1.5}
+.task-area-card .entry-main p{font-size:10px}
+.task-area-card .entry-right{gap:6px;align-items:flex-end;flex-direction:column;margin-left:0}
+.task-area-card .entry-actions{opacity:.8}
+.task-area-card .entry-actions button{width:25px;height:25px}
+.task-area-card .status-chip{font-size:8px;padding:4px 6px}
+.task-empty{min-height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:18px;text-align:center;color:#9a99ad;font-size:10px;line-height:1.5}
+.task-empty button{border:0;background:transparent;color:#6f5be8;font-size:10px;font-weight:800;padding:5px}
+.task-empty button:hover{text-decoration:underline}
+.task-add-inline{width:100%;display:flex;justify-content:center;align-items:center;gap:6px;padding:11px;border:0;border-top:1px solid #f0eff6;background:#fff;color:#6f5be8;font-size:10px;font-weight:800}
+.task-add-inline:hover{background:#faf9ff}
+@media(max-width:760px){.task-intro{padding:19px;align-items:flex-start}.task-intro h2{font-size:20px}.task-intro-count{min-width:104px;padding:11px}.task-area-grid{grid-template-columns:1fr}.task-horizon{padding:13px}.task-horizon-heading h2{font-size:18px}.task-board-toolbar>span{display:none}}
+@media(max-width:520px){.task-intro{flex-direction:column}.task-intro-count{grid-template-columns:auto auto;min-width:100%}.task-board{gap:15px}.task-horizon-heading{align-items:flex-start}.task-horizon-total{padding:7px}.task-area-heading{padding:13px}.task-area-list{padding:0 12px}}
