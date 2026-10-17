@@ -114,6 +114,12 @@ function SpendManager({ session, onError, onToast }) {
   const [filterType, setFilterType] = useState('expense');
   const [filterText, setFilterText] = useState('');
   const [reportMode, setReportMode] = useState('month');
+  const [lendingRows, setLendingRows] = useState([]);
+  const [lendingOpen, setLendingOpen] = useState(false);
+  const [lendingFormOpen, setLendingFormOpen] = useState(false);
+  const [lendingEditingId, setLendingEditingId] = useState(null);
+  const blankLending = () => ({ person_name: '', lent_date: todayISO(), amount_lent: '', amount_repaid: '0', expected_date: '', notes: '' });
+  const [lendingForm, setLendingForm] = useState(blankLending());
 
   const loadTransactions = async () => {
     if (!session?.user?.id) return;
@@ -123,7 +129,34 @@ function SpendManager({ session, onError, onToast }) {
     else setRows(data || []);
     setLoading(false);
   };
-  useEffect(() => { loadTransactions(); }, [session?.user?.id]);
+  const loadLending = async () => {
+    if (!session?.user?.id) return;
+    const { data, error: queryError } = await supabase.from('spend_lending').select('*').order('lent_date', { ascending: false });
+    if (queryError) onError(queryError.message); else setLendingRows(data || []);
+  };
+  useEffect(() => { loadTransactions(); loadLending(); }, [session?.user?.id]);
+  const outstanding = lendingRows.reduce((sum, r) => sum + Number(r.amount_lent || 0) - Number(r.amount_repaid || 0), 0);
+  const saveLending = async event => {
+    event.preventDefault();
+    const lent = Number(lendingForm.amount_lent), repaid = Number(lendingForm.amount_repaid || 0);
+    if (!lendingForm.person_name.trim() || lent <= 0 || repaid < 0 || repaid > lent) { onError('Enter a person name and valid lent/repaid amounts.'); return; }
+    setSaving(true);
+    const payload = { user_id: session.user.id, person_name: lendingForm.person_name.trim(), lent_date: lendingForm.lent_date || todayISO(), amount_lent: lent, amount_repaid: repaid, expected_date: lendingForm.expected_date || null, notes: lendingForm.notes.trim(), updated_at: new Date().toISOString() };
+    const result = lendingEditingId ? await supabase.from('spend_lending').update(payload).eq('id', lendingEditingId).select().single() : await supabase.from('spend_lending').insert(payload).select().single();
+    setSaving(false);
+    if (result.error) { onError(result.error.message); return; }
+    setLendingRows(old => lendingEditingId ? old.map(r => r.id === lendingEditingId ? result.data : r) : [result.data, ...old]);
+    setLendingFormOpen(false); setLendingEditingId(null); onToast(lendingEditingId ? 'Lending record updated' : 'Lending record saved');
+  };
+  const editLending = row => {
+    setLendingForm({ person_name: row.person_name, lent_date: row.lent_date, amount_lent: String(row.amount_lent), amount_repaid: String(row.amount_repaid), expected_date: row.expected_date || '', notes: row.notes || '' });
+    setLendingEditingId(row.id); setLendingFormOpen(true);
+  };
+  const deleteLending = async row => {
+    if (!window.confirm('Delete this lending record?')) return;
+    const { error: deleteError } = await supabase.from('spend_lending').delete().eq('id', row.id);
+    if (deleteError) onError(deleteError.message); else { setLendingRows(old => old.filter(r => r.id !== row.id)); onToast('Lending record deleted'); }
+  };
 
   const monthRows = useMemo(() => rows.filter(r => (r.transaction_date || '').slice(0, 7) === filterMonth), [rows, filterMonth]);
   const monthExpenses = monthRows.filter(r => r.transaction_type === 'expense');
@@ -177,6 +210,7 @@ function SpendManager({ session, onError, onToast }) {
 
   return <div className="spend-manager">
     <div className="spend-toolbar"><div><span className="eyebrow muted">DAILY MONEY LOG</span><h2>Every rupee, accounted for.</h2><p>Log expenses, income and transfers across your three bank accounts.</p></div><button className="primary-btn" onClick={startNew}><Plus size={17}/> Add transaction</button></div>
+    <button type="button" className="spend-lending-card" onClick={() => setLendingOpen(true)}><span className="spend-lending-icon"><Wallet size={21}/></span><span className="spend-lending-copy"><strong>People who owe me</strong><small>{lendingRows.length} lending records · tap to view or edit people and amounts</small></span><span className="spend-lending-total">{money(outstanding)}<small>Outstanding</small></span><Pencil size={17}/></button>
     <div className="spend-month-control"><label>Report month<input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)}/></label><span>{monthRows.length} transactions in this month</span></div>
     <div className="spend-stat-grid">
       <div className="spend-stat expense"><span>Money spent</span><strong>{money(totalExpenses)}</strong><small>Expenses logged this month</small></div>
@@ -193,6 +227,15 @@ function SpendManager({ session, onError, onToast }) {
       <div className="spend-filter-row"><input type="search" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Search description, category…"/><select value={reportMode} onChange={e => setReportMode(e.target.value)}><option value="month">Selected month</option><option value="all">All dates</option></select><select value={filterAccount} onChange={e => setFilterAccount(e.target.value)}><option value="ALL">All accounts</option>{SPEND_ACCOUNTS.map(a => <option key={a} value={a}>{a}</option>)}<option value="UNASSIGNED">Older / unassigned</option></select><select value={filterType} onChange={e => setFilterType(e.target.value)}><option value="all">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="transfer">Transfers</option></select></div>
       {loading ? <div className="spend-empty-small">Loading transactions…</div> : filteredRows.length ? <div className="spend-table-wrap"><table className="spend-table"><thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Type</th><th>Category</th><th>Amount</th><th></th></tr></thead><tbody>{filteredRows.slice(0, 250).map(r => <tr key={r.id}><td>{niceDate(r.transaction_date)}</td><td><strong>{r.description}</strong>{r.notes && <small>{r.notes}</small>}</td><td>{r.transaction_type === 'transfer' ? <>{r.account} → {r.transfer_to}</> : r.account}</td><td><span className={'spend-type-tag ' + r.transaction_type}>{r.transaction_type}</span></td><td>{r.category || 'Other'}</td><td className={r.transaction_type === 'expense' ? 'spend-amount-out' : r.transaction_type === 'income' ? 'spend-amount-in' : ''}>{money(r.amount)}</td><td><div className="spend-row-actions"><button title="Edit" onClick={() => startEdit(r)}><Pencil size={15}/></button><button title="Delete" onClick={() => remove(r)}><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div> : <div className="spend-empty-small">No matching transactions. Add your first entry above.</div>}
     </section>
+    {lendingOpen && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setLendingOpen(false)}><section className="entry-modal spend-entry-modal"><div className="modal-head"><div><span className="eyebrow muted">PERSONAL LENDING</span><h2>People who owe me</h2></div><button type="button" className="icon-btn" onClick={() => setLendingOpen(false)}><X size={19}/></button></div><p className="spend-lending-intro">Record who borrowed money, how much they borrowed, how much they have repaid, and when you expect it back.</p><button className="primary-btn" type="button" onClick={() => { setLendingForm(blankLending()); setLendingEditingId(null); setLendingFormOpen(true); }}><Plus size={16}/> Add person</button>
+      {lendingRows.length ? <div className="spend-lending-list">{lendingRows.map(r => <div className="spend-lending-row" key={r.id}><div><strong>{r.person_name}</strong><small>Lent {niceDate(r.lent_date)}{r.expected_date ? ' · Expected ' + niceDate(r.expected_date) : ''}</small><small>Repaid {money(r.amount_repaid)} of {money(r.amount_lent)}</small></div><div className="spend-lending-row-right"><strong>{money(Number(r.amount_lent)-Number(r.amount_repaid))}</strong><small>Still owed</small><button type="button" onClick={() => editLending(r)}><Pencil size={14}/> Edit</button><button type="button" onClick={() => deleteLending(r)}><Trash2 size={14}/> Delete</button></div></div>)}</div> : <div className="spend-empty-small">No lending records yet. Add a person to start tracking money owed to you.</div>}
+      <div className="modal-actions"><button className="secondary-btn" type="button" onClick={() => setLendingOpen(false)}>Close</button></div></section></div>}
+    {lendingFormOpen && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setLendingFormOpen(false)}><form className="entry-modal spend-entry-modal" onSubmit={saveLending}><div className="modal-head"><div><span className="eyebrow muted">MONEY OWED TO ME</span><h2>{lendingEditingId ? 'Edit lending record' : 'Add lending record'}</h2></div><button type="button" className="icon-btn" onClick={() => setLendingFormOpen(false)}><X size={19}/></button></div>
+      <label>Person's name<input value={lendingForm.person_name} onChange={e => setLendingForm(v => ({...v, person_name:e.target.value}))} placeholder="Who borrowed money?" required/></label>
+      <div className="form-grid"><label>Date lent<input type="date" value={lendingForm.lent_date} onChange={e => setLendingForm(v => ({...v, lent_date:e.target.value}))} required/></label><label>Amount lent (₹)<input type="number" min="0.01" step="0.01" value={lendingForm.amount_lent} onChange={e => setLendingForm(v => ({...v, amount_lent:e.target.value}))} required/></label></div>
+      <div className="form-grid"><label>Amount repaid (₹)<input type="number" min="0" step="0.01" value={lendingForm.amount_repaid} onChange={e => setLendingForm(v => ({...v, amount_repaid:e.target.value}))} required/></label><label>Expected return date<input type="date" value={lendingForm.expected_date} onChange={e => setLendingForm(v => ({...v, expected_date:e.target.value}))}/></label></div>
+      <label>Notes (optional)<textarea rows="2" value={lendingForm.notes} onChange={e => setLendingForm(v => ({...v, notes:e.target.value}))} placeholder="Any repayment details…"/></label>
+      <div className="modal-actions"><button type="button" className="secondary-btn" onClick={() => setLendingFormOpen(false)}>Cancel</button><button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Save lending record'} <span>→</span></button></div></form></div>}
     {formOpen && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setFormOpen(false)}><form className="entry-modal spend-entry-modal" onSubmit={save}><div className="modal-head"><div><span className="eyebrow muted">{editingId ? 'EDIT TRANSACTION' : 'DAILY MONEY LOG'}</span><h2>{editingId ? 'Update transaction' : 'Add transaction'}</h2></div><button type="button" className="icon-btn" onClick={() => setFormOpen(false)}><X size={19}/></button></div>
       <div className="spend-type-selector"><button type="button" className={form.transaction_type === 'expense' ? 'selected' : ''} onClick={() => setForm(v => ({...v, transaction_type:'expense', category:'Food & Drinks'}))}>Expense</button><button type="button" className={form.transaction_type === 'income' ? 'selected' : ''} onClick={() => setForm(v => ({...v, transaction_type:'income', category:'Income'}))}>Income</button><button type="button" className={form.transaction_type === 'transfer' ? 'selected' : ''} onClick={() => setForm(v => ({...v, transaction_type:'transfer', category:'Transfers'}))}>Transfer</button></div>
       <div className="form-grid"><label>Date<input type="date" value={form.transaction_date} onChange={e => setForm(v => ({...v, transaction_date:e.target.value}))} required/></label><label>Amount (₹)<input type="number" min="0.01" step="0.01" value={form.amount} onChange={e => setForm(v => ({...v, amount:e.target.value}))} placeholder="0.00" required/></label></div>
