@@ -40,3 +40,14 @@
 .task-add-inline:hover{background:#faf9ff}
 @media(max-width:760px){.task-intro{padding:19px;align-items:flex-start}.task-intro h2{font-size:20px}.task-intro-count{min-width:104px;padding:11px}.task-area-grid{grid-template-columns:1fr}.task-horizon{padding:13px}.task-horizon-heading h2{font-size:18px}.task-board-toolbar>span{display:none}}
 @media(max-width:520px){.task-intro{flex-direction:column}.task-intro-count{grid-template-columns:auto auto;min-width:100%}.task-board{gap:15px}.task-horizon-heading{align-items:flex-start}.task-horizon-total{padding:7px}.task-area-heading{padding:13px}.task-area-list{padding:0 12px}}
+
+/* Simplified two-section task list */
+.task-section-actions{display:flex;align-items:center;gap:9px}
+.task-section-add{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border:1px solid #e7e2ff;border-radius:12px;background:#f5f2ff;color:#6f5be8;transition:background .18s,transform .18s}
+.task-section-add:hover{background:#eae4ff;transform:translateY(-1px)}
+.task-simple-list{padding:0 4px}
+.task-simple-list>.entry-row{padding:15px 5px;border-bottom:1px solid #f0eff6}
+.task-simple-list>.entry-row:last-child{border-bottom:0}
+.task-simple-list .entry-main h3{font-size:13px}
+.task-simple-list .entry-main p{font-size:12px;line-height:1.6}
+@media(max-width:520px){.task-section-actions{gap:6px}.task-section-add{width:34px;height:34px;flex-basis:34px}.task-horizon-heading{gap:8px}}
