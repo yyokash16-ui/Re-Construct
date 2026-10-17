@@ -423,3 +423,23 @@ body{background:radial-gradient(ellipse at 84% 0%,rgba(220,214,255,.28),transpar
   .spend-filter-row { grid-template-columns:1fr; }
   .spend-report-card, .spend-transactions { padding:14px; }
 }
+
+/* Personal lending card and editor */
+.spend-lending-card { display:flex; align-items:center; gap:14px; width:100%; text-align:left; padding:18px 20px; border:1px solid #ded5f4; border-radius:17px; background:linear-gradient(110deg,#f0eafd,#fff); color:inherit; cursor:pointer; }
+.spend-lending-card:hover { border-color:#a891dc; box-shadow:0 5px 18px rgba(104,78,168,.09); }
+.spend-lending-icon { width:44px; height:44px; display:grid; place-items:center; flex-shrink:0; border-radius:13px; background:#e2d7fb; color:#6f51b2; }
+.spend-lending-copy { display:grid; gap:5px; flex:1; min-width:0; }
+.spend-lending-copy strong { font-size:15px; }
+.spend-lending-copy small, .spend-lending-total small { color:var(--muted,#777286); font-size:11px; font-weight:400; }
+.spend-lending-total { display:grid; gap:4px; justify-items:end; font-size:20px; font-weight:750; white-space:nowrap; }
+.spend-lending-intro { color:var(--muted,#777286); font-size:13px; line-height:1.6; margin:0 0 17px; }
+.spend-lending-list { display:grid; gap:10px; margin:17px 0; max-height:45vh; overflow:auto; }
+.spend-lending-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px; border:1px solid var(--line,#e9e5f3); border-radius:12px; }
+.spend-lending-row > div:first-child { display:grid; gap:5px; min-width:0; }
+.spend-lending-row > div:first-child strong { font-size:14px; }
+.spend-lending-row small { color:var(--muted,#777286); font-size:11px; }
+.spend-lending-row-right { display:grid; grid-template-columns:auto auto; gap:5px 9px; align-items:center; justify-items:end; }
+.spend-lending-row-right > strong { font-size:15px; }
+.spend-lending-row-right > small { grid-column:1 / -1; }
+.spend-lending-row-right button { display:flex; align-items:center; gap:4px; padding:6px 8px; border:1px solid var(--line,#e9e5f3); border-radius:8px; background:white; color:inherit; font-size:11px; cursor:pointer; }
+@media (max-width:560px) { .spend-lending-card { padding:14px; gap:10px; } .spend-lending-total { font-size:15px; } .spend-lending-row { align-items:flex-start; flex-direction:column; } .spend-lending-row-right { width:100%; justify-items:start; } }
