@@ -207,6 +207,7 @@ function App() {
             return <div className={`task-progress-card ${area}`} key={area}><div className="task-progress-label"><span className={`task-area-icon ${area}`}>{area === 'personal' ? '✦' : '↗'}</span><strong>{area === 'personal' ? 'Personal tasks' : 'Professional tasks'}</strong></div><div className="task-progress-numbers"><strong>{done}</strong><span>completed</span><i>/</i><strong>{todayTasks.length}</strong><span>entered</span></div><div className="task-progress-track"><i style={{width: `${todayTasks.length ? done / todayTasks.length * 100 : 0}%`}} /></div></div>
           })}
         </section> : <section className="module-summary"><div className={`module-icon large ${moduleMeta?.color}`}>{moduleMeta && <moduleMeta.icon size={25} />}</div><div><strong>{entries.filter(e => e.module === activeModule).length} records</strong><p>{activeModule === 'career' ? 'Capture concepts from chemical engineering, simulation practice, technical skills, applications and interview preparation.' : activeModule === 'business' ? 'Save business ideas, experiments, decisions and next actions.' : activeModule === 'review' ? 'Log reflection notes and time spent. Small reviews help make your next day more intentional.' : activeModule === 'entertainment' ? 'Track films, books, music, games or experiences, with notes and ratings.' : activeModule === 'spend' ? 'Record expenses with an amount and date to build a clearer picture of your spending.' : 'Capture tasks, deadlines and small actions you want to complete.'}</p></div><div className="summary-progress"><span>{entries.filter(e => e.module === activeModule && e.status === 'completed').length} completed</span><div className="progress-track"><i style={{ width: `${entries.filter(e => e.module === activeModule).length ? entries.filter(e => e.module === activeModule && e.status === 'completed').length / entries.filter(e => e.module === activeModule).length * 100 : 0}%` }} /></div></div></section>}
+        {activeModule === 'entertainment' && <YouTubeUsagePanel session={session} />}
         {activeModule === 'tasks' ? <TaskBoard tasks={visibleEntries.filter(e => e.module === 'tasks')} loading={loading} search={search} onSearch={setSearch} onAdd={(horizon, area) => openCreate('tasks', { task_horizon: horizon, task_area: area })} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} search={search} /> : <section id="records-area" className="records-panel">
           <div className="records-header"><div><h2>{activeModule === 'dashboard' ? 'Your records' : 'Your ' + (moduleMeta?.short.toLowerCase() || 'records')}</h2><p>{visibleEntries.length} {visibleEntries.length === 1 ? 'entry' : 'entries'} saved in your space</p></div><div className="records-tools"><div className="search-box"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search records…" /></div>{activeModule === 'dashboard' && <button className="secondary-btn compact" onClick={() => openCreate('tasks')}><Plus size={16} /> Add</button>}</div></div>
           {loading ? <div className="empty-state"><div className="loading-spinner" /><p>Loading your records…</p></div> : visibleEntries.length === 0 ? <div className="empty-state"><div className="empty-icon"><BookOpen size={23} /></div><h3>{search ? 'No matching records' : 'A fresh page'}</h3><p>{search ? 'Try another search term.' : 'Your next step doesn’t have to be big. Add a record to get started.'}</p><button className="primary-btn" onClick={() => openCreate()}><Plus size={17} /> Add your first record</button></div> :
@@ -248,6 +249,56 @@ function TaskBoard({ tasks, loading, search, onSearch, onAdd, onEdit, onDelete, 
       })}</div>
     </section>)}
   </div>
+}
+
+function YouTubeUsagePanel({ session }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      setLoading(true); setLoadError('')
+      const { data, error } = await supabase.from('youtube_daily_usage').select('usage_date,youtube_minutes,shorts_minutes,shorts_count,regular_minutes,source,synced_at').eq('user_id', session.user.id).order('usage_date', { ascending: true }).limit(90)
+      if (!alive) return
+      if (error) setLoadError(error.message)
+      else setRows(data || [])
+      setLoading(false)
+    }
+    load()
+    return () => { alive = false }
+  }, [session.user.id])
+  const today = new Date().toLocaleDateString('en-CA')
+  const todayRow = rows.find(row => row.usage_date === today)
+  const recent = rows.slice(-14)
+  const maxMinutes = Math.max(1, ...recent.map(row => Number(row.shorts_minutes || 0)))
+  const totalYoutube = rows.reduce((sum, row) => sum + Number(row.youtube_minutes || 0), 0)
+  const totalShorts = rows.reduce((sum, row) => sum + Number(row.shorts_minutes || 0), 0)
+  const totalCount = rows.reduce((sum, row) => sum + Number(row.shorts_count || 0), 0)
+  const fmt = (mins) => {
+    const n = Number(mins || 0)
+    return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`
+  }
+  return <section className="youtube-usage-panel">
+    <div className="youtube-panel-head">
+      <div><span className="eyebrow muted">ANDROID COMPANION</span><h2>YouTube usage</h2><p>Daily app time and your manually tracked Shorts sessions.</p></div>
+      <span className={todayRow ? 'youtube-sync-pill synced' : 'youtube-sync-pill'}>{todayRow ? 'Today synced' : 'Waiting for phone sync'}</span>
+    </div>
+    <div className="youtube-metrics">
+      <div className="youtube-metric"><span>Total YouTube today</span><strong>{todayRow ? fmt(todayRow.youtube_minutes) : '—'}</strong></div>
+      <div className="youtube-metric shorts"><span>Shorts time today</span><strong>{todayRow ? fmt(todayRow.shorts_minutes) : '—'}</strong></div>
+      <div className="youtube-metric"><span>Shorts watched today</span><strong>{todayRow ? Number(todayRow.shorts_count || 0).toLocaleString('en-IN') : '—'}</strong></div>
+    </div>
+    <div className="youtube-chart-wrap">
+      <div className="youtube-chart-title"><div><h3>Daily Shorts time</h3><p>Last 14 recorded days · minutes per day</p></div><strong>{fmt(totalShorts)} <small>tracked total</small></strong></div>
+      {loading ? <div className="youtube-chart-empty">Loading usage history…</div> : loadError ? <div className="youtube-chart-empty">Could not load usage: {loadError}</div> : recent.length === 0 ? <div className="youtube-chart-empty">No phone data yet. Install the Android companion, grant Usage access, then sign in and sync.</div> : <div className="youtube-bars" role="img" aria-label="Bar chart of daily Shorts time for the last 14 recorded days">
+        {recent.map(row => <div className="youtube-bar-column" key={row.usage_date} title={`${row.usage_date}: ${row.shorts_minutes} Shorts minutes, ${row.shorts_count} Shorts`}>
+          <div className="youtube-bar-value">{row.shorts_minutes}m</div><div className="youtube-bar-track"><i style={{height: `${Math.max(4, Number(row.shorts_minutes || 0) / maxMinutes * 100)}%`}} /></div><span>{new Date(row.usage_date + 'T00:00:00').toLocaleDateString('en-IN', {day:'numeric',month:'short'})}</span>
+        </div>)}
+      </div>}
+    </div>
+    <div className="youtube-history-footer"><span>{rows.length} days stored · {fmt(totalYoutube)} total YouTube · {totalCount.toLocaleString('en-IN')} Shorts logged</span><a href="https://github.com/yyokash16-ui/Re-Construct/tree/main/android-youtube-tracker" target="_blank" rel="noreferrer">Android setup ↗</a></div>
+  </section>
 }
 
 function StatCard({ icon: Icon, label, value, note, color }) {
