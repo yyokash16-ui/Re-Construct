@@ -443,3 +443,8 @@ body{background:radial-gradient(ellipse at 84% 0%,rgba(220,214,255,.28),transpar
 .spend-lending-row-right > small { grid-column:1 / -1; }
 .spend-lending-row-right button { display:flex; align-items:center; gap:4px; padding:6px 8px; border:1px solid var(--line,#e9e5f3); border-radius:8px; background:white; color:inherit; font-size:11px; cursor:pointer; }
 @media (max-width:560px) { .spend-lending-card { padding:14px; gap:10px; } .spend-lending-total { font-size:15px; } .spend-lending-row { align-items:flex-start; flex-direction:column; } .spend-lending-row-right { width:100%; justify-items:start; } }
+
+/* Compact clickable lending total in the spending summary row */
+.spend-stat.spend-lending-stat { appearance:none; width:100%; text-align:left; color:inherit; font:inherit; cursor:pointer; border-left:0; border-right:0; border-bottom:0; }
+.spend-stat.spend-lending-stat:hover { background:#fbf9ff; box-shadow:0 5px 18px rgba(104,78,168,.08); }
+.spend-stat.spend-lending-stat strong { color:#6f51b2; }
