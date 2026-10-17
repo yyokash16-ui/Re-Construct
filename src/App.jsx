@@ -254,21 +254,31 @@ function TaskBoard({ tasks, loading, search, onSearch, onAdd, onEdit, onDelete, 
 function YouTubeUsagePanel({ session }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState('')
-  useEffect(() => {
-    let alive = true
-    const load = async () => {
-      setLoading(true); setLoadError('')
-      const { data, error } = await supabase.from('youtube_daily_usage').select('usage_date,youtube_minutes,shorts_minutes,shorts_count,regular_minutes,source,synced_at').eq('user_id', session.user.id).order('usage_date', { ascending: true }).limit(90)
-      if (!alive) return
-      if (error) setLoadError(error.message)
-      else setRows(data || [])
-      setLoading(false)
-    }
-    load()
-    return () => { alive = false }
-  }, [session.user.id])
+  const [notice, setNotice] = useState('')
   const today = new Date().toLocaleDateString('en-CA')
+  const [usageDate, setUsageDate] = useState(today)
+  const [youtubeMinutes, setYoutubeMinutes] = useState('')
+  const [shortsMinutes, setShortsMinutes] = useState('')
+  const [shortsCount, setShortsCount] = useState('')
+
+  const loadRows = async () => {
+    setLoading(true); setLoadError('')
+    const { data, error } = await supabase.from('youtube_daily_usage').select('usage_date,youtube_minutes,shorts_minutes,shorts_count,regular_minutes,source,synced_at').eq('user_id', session.user.id).order('usage_date', { ascending: true }).limit(90)
+    if (error) setLoadError(error.message)
+    else setRows(data || [])
+    setLoading(false)
+  }
+  useEffect(() => { loadRows() }, [session.user.id])
+
+  const selectedRow = rows.find(row => row.usage_date === usageDate)
+  useEffect(() => {
+    setYoutubeMinutes(selectedRow ? String(selectedRow.youtube_minutes ?? 0) : '')
+    setShortsMinutes(selectedRow ? String(selectedRow.shorts_minutes ?? 0) : '')
+    setShortsCount(selectedRow ? String(selectedRow.shorts_count ?? 0) : '')
+    setNotice('')
+  }, [usageDate, selectedRow?.youtube_minutes, selectedRow?.shorts_minutes, selectedRow?.shorts_count])
   const todayRow = rows.find(row => row.usage_date === today)
   const recent = rows.slice(-14)
   const maxMinutes = Math.max(1, ...recent.map(row => Number(row.shorts_minutes || 0)))
@@ -279,11 +289,54 @@ function YouTubeUsagePanel({ session }) {
     const n = Number(mins || 0)
     return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`
   }
+  const saveDailyUsage = async (event) => {
+    event.preventDefault()
+    const yt = Number(youtubeMinutes)
+    const shorts = Number(shortsMinutes)
+    const count = Number(shortsCount)
+    if (!usageDate || youtubeMinutes === '' || shortsMinutes === '' || shortsCount === '' ||
+        !Number.isInteger(yt) || !Number.isInteger(shorts) || !Number.isInteger(count) ||
+        yt < 0 || shorts < 0 || count < 0) {
+      setNotice('Enter the date and non-negative whole numbers for all three values.')
+      return
+    }
+    setSaving(true); setNotice(''); setLoadError('')
+    const { error } = await supabase.from('youtube_daily_usage').upsert({
+      user_id: session.user.id,
+      usage_date: usageDate,
+      youtube_minutes: yt,
+      shorts_minutes: shorts,
+      shorts_count: count,
+      source: 'manual',
+      synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id,usage_date' })
+    if (error) {
+      setLoadError(error.message)
+      setNotice('Could not save this daily record.')
+    } else {
+      setNotice('Daily YouTube record saved to ReConstruct.')
+      await loadRows()
+    }
+    setSaving(false)
+  }
+
   return <section className="youtube-usage-panel">
     <div className="youtube-panel-head">
-      <div><span className="eyebrow muted">ANDROID COMPANION</span><h2>YouTube usage</h2><p>Daily app time and your manually tracked Shorts sessions.</p></div>
-      <span className={todayRow ? 'youtube-sync-pill synced' : 'youtube-sync-pill'}>{todayRow ? 'Today synced' : 'Waiting for phone sync'}</span>
+      <div><span className="eyebrow muted">DAILY TRACKING</span><h2>YouTube usage</h2><p>At the end of the day, enter the numbers from Android Digital Wellbeing and your Shorts estimate.</p></div>
+      <span className={todayRow ? 'youtube-sync-pill synced' : 'youtube-sync-pill'}>{todayRow ? 'Today recorded' : 'Today not recorded'}</span>
     </div>
+    <form className="youtube-daily-form" onSubmit={saveDailyUsage}>
+      <div className="youtube-form-heading"><div><h3>Log your daily usage</h3><p>Your entry is saved to your ReConstruct account and can be edited later.</p></div></div>
+      <div className="youtube-input-grid">
+        <label>Usage date<input type="date" value={usageDate} max={today} onChange={e => setUsageDate(e.target.value)} required /></label>
+        <label>Total YouTube time (minutes)<input type="number" min="0" step="1" inputMode="numeric" value={youtubeMinutes} onChange={e => setYoutubeMinutes(e.target.value)} placeholder="e.g. 95" required /><small>Check Android Settings → Digital Wellbeing.</small></label>
+        <label>Shorts time (minutes)<input type="number" min="0" step="1" inputMode="numeric" value={shortsMinutes} onChange={e => setShortsMinutes(e.target.value)} placeholder="e.g. 40" required /><small>Enter your Shorts time or best estimate.</small></label>
+        <label>Shorts watched (count)<input type="number" min="0" step="1" inputMode="numeric" value={shortsCount} onChange={e => setShortsCount(e.target.value)} placeholder="e.g. 35" required /><small>Use your count or best estimate.</small></label>
+      </div>
+      {notice && <div className={notice.startsWith('Could not') ? 'youtube-form-notice error' : 'youtube-form-notice'} role="status">{notice}</div>}
+      <div className="youtube-form-actions"><span>Regular time is calculated automatically as total time minus Shorts time (minimum 0).</span><button className="primary-btn" type="submit" disabled={saving}>{saving ? 'Saving…' : selectedRow ? 'Update daily record' : 'Save daily record'} <span>→</span></button></div>
+    </form>
     <div className="youtube-metrics">
       <div className="youtube-metric"><span>Total YouTube today</span><strong>{todayRow ? fmt(todayRow.youtube_minutes) : '—'}</strong></div>
       <div className="youtube-metric shorts"><span>Shorts time today</span><strong>{todayRow ? fmt(todayRow.shorts_minutes) : '—'}</strong></div>
@@ -291,16 +344,15 @@ function YouTubeUsagePanel({ session }) {
     </div>
     <div className="youtube-chart-wrap">
       <div className="youtube-chart-title"><div><h3>Daily Shorts time</h3><p>Last 14 recorded days · minutes per day</p></div><strong>{fmt(totalShorts)} <small>tracked total</small></strong></div>
-      {loading ? <div className="youtube-chart-empty">Loading usage history…</div> : loadError ? <div className="youtube-chart-empty">Could not load usage: {loadError}</div> : recent.length === 0 ? <div className="youtube-chart-empty">No phone data yet. Install the Android companion, grant Usage access, then sign in and sync.</div> : <div className="youtube-bars" role="img" aria-label="Bar chart of daily Shorts time for the last 14 recorded days">
+      {loading ? <div className="youtube-chart-empty">Loading usage history…</div> : loadError ? <div className="youtube-chart-empty">Could not load usage: {loadError}</div> : recent.length === 0 ? <div className="youtube-chart-empty">No daily entries yet. Add your first record above after checking your phone.</div> : <div className="youtube-bars" role="img" aria-label="Bar chart of daily Shorts time for the last 14 recorded days">
         {recent.map(row => <div className="youtube-bar-column" key={row.usage_date} title={`${row.usage_date}: ${row.shorts_minutes} Shorts minutes, ${row.shorts_count} Shorts`}>
           <div className="youtube-bar-value">{row.shorts_minutes}m</div><div className="youtube-bar-track"><i style={{height: `${Math.max(4, Number(row.shorts_minutes || 0) / maxMinutes * 100)}%`}} /></div><span>{new Date(row.usage_date + 'T00:00:00').toLocaleDateString('en-IN', {day:'numeric',month:'short'})}</span>
         </div>)}
       </div>}
     </div>
-    <div className="youtube-history-footer"><span>{rows.length} days stored · {fmt(totalYoutube)} total YouTube · {totalCount.toLocaleString('en-IN')} Shorts logged</span><a href="https://github.com/yyokash16-ui/Re-Construct/tree/main/android-youtube-tracker" target="_blank" rel="noreferrer">Android setup ↗</a></div>
+    <div className="youtube-history-footer"><span>{rows.length} days stored · {fmt(totalYoutube)} total YouTube · {totalCount.toLocaleString('en-IN')} Shorts logged</span><a href="https://developer.android.com/reference/android/app/usage/UsageStatsManager" target="_blank" rel="noreferrer">How Android usage is measured ↗</a></div>
   </section>
 }
-
 function StatCard({ icon: Icon, label, value, note, color }) {
   return <div className="stat-card"><div className={`stat-icon ${color}`}><Icon size={19} /></div><span className="stat-label">{label}</span><strong className="stat-value">{value}</strong><span className="stat-note">{note}</span><span className="stat-trend"><ArrowUpRight size={14} /></span></div>
 }
