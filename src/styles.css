@@ -325,3 +325,21 @@ body{background:radial-gradient(ellipse at 84% 0%,rgba(220,214,255,.28),transpar
 .youtube-history-footer a{color:#6f5be8;font-weight:700;text-decoration:none}
 .youtube-history-footer a:hover{text-decoration:underline}
 @media(max-width:520px){.youtube-usage-panel{padding:16px;border-radius:14px}.youtube-panel-head{flex-direction:column}.youtube-metrics{grid-template-columns:1fr}.youtube-metric{padding:12px;flex-direction:row;align-items:center;justify-content:space-between}.youtube-metric strong{font-size:20px}.youtube-chart-wrap{padding:14px 10px 10px}.youtube-bars{gap:5px}.youtube-bar-column{min-width:31px}}
+
+
+/* End-of-day YouTube manual logging form */
+.youtube-daily-form{margin:0 0 19px;padding:17px;border:1px solid #e5e0ff;background:linear-gradient(135deg,#fcfbff,#f8f6ff);border-radius:13px}
+.youtube-form-heading{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px}
+.youtube-form-heading h3{font-size:13px;color:#34324a;margin:0 0 5px}
+.youtube-form-heading p{font-size:10px;color:#9292a5;line-height:1.5;margin:0}
+.youtube-input-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.youtube-input-grid label{display:flex;flex-direction:column;gap:7px;font-size:10px;font-weight:700;color:#55546b;min-width:0}
+.youtube-input-grid input{width:100%;min-width:0;border:1px solid #e4e4ee;background:#fff;border-radius:8px;padding:11px 12px;color:#333249;font-size:12px}
+.youtube-input-grid input:focus{outline:none;border-color:#9c8cf0;box-shadow:0 0 0 3px #7864e719}
+.youtube-input-grid small{font-size:9px;font-weight:400;color:#9999ac;line-height:1.4}
+.youtube-form-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:15px}
+.youtube-form-actions>span{font-size:9px;line-height:1.6;color:#85859a;max-width:380px}
+.youtube-form-actions .primary-btn{flex-shrink:0}
+.youtube-form-notice{font-size:10px;line-height:1.5;color:#258b68;background:#e7f8f0;border:1px solid #d4efe2;border-radius:8px;padding:10px 12px;margin-top:12px}
+.youtube-form-notice.error{color:#b84949;background:#fff7f7;border-color:#ffdada}
+@media(max-width:520px){.youtube-daily-form{padding:13px}.youtube-input-grid{grid-template-columns:1fr}.youtube-form-actions{align-items:stretch;flex-direction:column}.youtube-form-actions .primary-btn{width:100%}}
