@@ -82,21 +82,18 @@ function EntryModal({ initial, onClose, onSave, busy }) {
       <div className="modal-head"><div><span className="eyebrow muted">{initial.id ? 'EDIT RECORD' : 'NEW RECORD'}</span><h2>{initial.id ? 'Make an update' : 'Add to your hub'}</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={19} /></button></div>
       <label>Section<select value={form.module} onChange={e => { const module = e.target.value; set('module', module); set('category', ''); if (module === 'tasks') { set('task_horizon', 'today'); set('task_area', 'personal') } }}>{modules.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
       <label>Title<input autoFocus maxLength="200" value={form.title} onChange={e => set('title', e.target.value)} placeholder={form.module === 'spend' ? 'e.g. Lunch with friends' : form.module === 'career' ? 'e.g. Revise heat transfer fundamentals' : 'What would you like to record?'} required /></label>
-      <div className="form-grid">
-        <label>{form.module === 'tasks' ? 'Time horizon' : form.module === 'spend' ? 'Expense type' : form.module === 'career' ? 'Focus area' : form.module === 'entertainment' ? 'Format' : 'Category'}
-          {form.module === 'tasks' ? <select value={form.task_horizon || 'today'} onChange={e => set('task_horizon', e.target.value)}><option value="today">To do for today</option><option value="long_term">Long-term task</option></select> : <input value={form.category} onChange={e => set('category', e.target.value)} placeholder={form.module === 'career' ? 'Mass transfer, DWSIM, internship…' : 'Optional'} />}
-        </label>
-        <label>{form.module === 'tasks' ? 'Task area' : form.module === 'spend' ? 'Amount (₹)' : form.module === 'review' ? 'Time spent (minutes)' : form.module === 'entertainment' ? 'Rating (0–5)' : 'Status'}
-          {form.module === 'tasks' ? <select value={form.task_area || 'personal'} onChange={e => set('task_area', e.target.value)}><option value="personal">Personal</option><option value="professional">Professional</option></select> :
-          form.module === 'spend' ? <input type="number" min="0" step="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0.00" /> :
-          form.module === 'review' ? <input type="number" min="0" step="1" value={form.duration_minutes} onChange={e => set('duration_minutes', e.target.value)} placeholder="Minutes" /> :
-          form.module === 'entertainment' ? <input type="number" min="0" max="5" step="0.5" value={form.rating} onChange={e => set('rating', e.target.value)} placeholder="e.g. 4.5" /> :
-          <select value={form.status} onChange={e => set('status', e.target.value)}>{Object.entries(statusLabels).filter(([v]) => v !== 'archived').map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>}
-        </label>
-      </div>
-      {form.module === 'tasks' && <label>Task status<select value={form.status} onChange={e => set('status', e.target.value)}>{Object.entries(statusLabels).filter(([v]) => v !== 'archived').map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label>}
-      <label>{form.module === 'spend' ? 'Date of spend' : form.module === 'review' ? 'Review date' : 'Due date'}<input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} /></label>
-      <label>Notes<textarea rows="3" value={form.details} onChange={e => set('details', e.target.value)} placeholder={form.module === 'career' ? 'Key concept, next practice step, links or notes…' : 'Add a little context for future you…'} /></label>
+      {form.module === 'tasks' ? <>
+        {form.task_horizon === 'long_term' && <label>Due date<input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} /></label>}
+      </> : <>
+        <div className="form-grid">
+          <label>{form.module === 'spend' ? 'Expense type' : form.module === 'career' ? 'Focus area' : form.module === 'entertainment' ? 'Format' : 'Category'}<input value={form.category} onChange={e => set('category', e.target.value)} placeholder={form.module === 'career' ? 'Mass transfer, DWSIM, internship…' : 'Optional'} /></label>
+          <label>{form.module === 'spend' ? 'Amount (₹)' : form.module === 'review' ? 'Time spent (minutes)' : form.module === 'entertainment' ? 'Rating (0–5)' : 'Status'}
+            {form.module === 'spend' ? <input type="number" min="0" step="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0.00" /> : form.module === 'review' ? <input type="number" min="0" step="1" value={form.duration_minutes} onChange={e => set('duration_minutes', e.target.value)} placeholder="Minutes" /> : form.module === 'entertainment' ? <input type="number" min="0" max="5" step="0.5" value={form.rating} onChange={e => set('rating', e.target.value)} placeholder="e.g. 4.5" /> : <select value={form.status} onChange={e => set('status', e.target.value)}>{Object.entries(statusLabels).filter(([v]) => v !== 'archived').map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>}
+          </label>
+        </div>
+        <label>{form.module === 'spend' ? 'Date of spend' : form.module === 'review' ? 'Review date' : 'Due date'}<input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} /></label>
+      </>}
+      <label>Notes<textarea rows="3" value={form.details} onChange={e => set('details', e.target.value)} placeholder={form.module === 'tasks' ? 'Add a simple note (optional)…' : form.module === 'career' ? 'Key concept, next practice step, links or notes…' : 'Add a little context for future you…'} /></label>
       <div className="modal-actions"><button type="button" className="secondary-btn" onClick={onClose}>Cancel</button><button className="primary-btn" disabled={busy || !form.title.trim()}>{busy ? 'Saving…' : initial.id ? 'Save changes' : 'Save record'} <span>→</span></button></div>
     </form>
   </div>
@@ -221,33 +218,23 @@ function App() {
 
 function TaskBoard({ tasks, loading, search, onSearch, onAdd, onEdit, onDelete, onToggle }) {
   const groups = [
-    { horizon: 'today', area: 'personal', title: 'Personal', description: 'Life admin, routines and things for you', icon: '✦' },
-    { horizon: 'today', area: 'professional', title: 'Professional', description: 'Work, studies and responsibilities for today', icon: '↗' },
-    { horizon: 'long_term', area: 'personal', title: 'Personal', description: 'Goals and commitments for later', icon: '✦' },
-    { horizon: 'long_term', area: 'professional', title: 'Professional', description: 'Deadlines, submissions and future work', icon: '↗' },
+    { horizon: 'today', title: 'To do for today', description: 'A simple list for what you need to do today.' },
+    { horizon: 'long_term', title: 'Long-term tasks', description: 'Keep future tasks here, with a due date when needed.' },
   ]
   return <div className="task-board">
     <div className="task-board-toolbar"><div className="search-box"><Search size={16}/><input value={search} onChange={e => onSearch(e.target.value)} placeholder="Search tasks…"/></div><span>Tasks stay private to your account</span></div>
-    {['today', 'long_term'].map(horizon => {
-      const group = groups.filter(item => item.horizon === horizon)
-      const sectionTasks = tasks.filter(task => taskHorizon(task) === horizon && task.status !== 'archived')
-      return <section className={`task-horizon ${horizon}`} key={horizon}>
-        <div className="task-horizon-heading"><div><span className="eyebrow muted">{horizon === 'today' ? 'FOCUS NOW' : 'PLAN AHEAD'}</span><h2>{horizon === 'today' ? 'To do for today' : 'Long-term tasks'}</h2><p>{horizon === 'today' ? 'A clear list for the day in front of you.' : 'Keep future submissions, deadlines and commitments in sight.'}</p></div><span className="task-horizon-total">{sectionTasks.filter(t => t.status !== 'completed').length} open</span></div>
-        <div className="task-area-grid">{group.map(area => {
-          const items = sectionTasks.filter(task => taskArea(task) === area.area).sort((a,b) => {
-            if (horizon === 'long_term' && a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
-            if (horizon === 'long_term' && a.due_date) return -1
-            if (horizon === 'long_term' && b.due_date) return 1
-            return (b.created_at || '').localeCompare(a.created_at || '')
-          })
-          return <section className="task-area-card" key={area.area}>
-            <header className="task-area-heading"><div className={`task-area-icon ${area.area}`}>{area.icon}</div><div><h3>{area.title}</h3><p>{area.description}</p></div><span className="task-area-count">{items.filter(t => t.status !== 'completed').length}</span></header>
-            <div className="task-area-list">
-              {loading ? <div className="task-empty">Loading tasks…</div> : items.length ? items.map(task => <EntryRow key={task.id} entry={task} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} />) : <div className="task-empty"><span>{area.area === 'personal' ? 'A little space for yourself.' : 'Nothing on the list yet.'}</span><button onClick={() => onAdd(horizon, area.area)}>+ Add a task</button></div>}
-            </div>
-            {items.length > 0 && <button className="task-add-inline" onClick={() => onAdd(horizon, area.area)}><Plus size={14}/> Add task</button>}
-          </section>
-        })}</div>
+    {groups.map(group => {
+      const items = tasks.filter(task => taskHorizon(task) === group.horizon && task.status !== 'archived').sort((a,b) => {
+        if (group.horizon === 'long_term' && a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
+        if (group.horizon === 'long_term' && a.due_date) return -1
+        if (group.horizon === 'long_term' && b.due_date) return 1
+        return (b.created_at || '').localeCompare(a.created_at || '')
+      })
+      return <section className={`task-horizon ${group.horizon}`} key={group.horizon}>
+        <div className="task-horizon-heading"><div><span className="eyebrow muted">{group.horizon === 'today' ? 'FOCUS NOW' : 'PLAN AHEAD'}</span><h2>{group.title}</h2><p>{group.description}</p></div><div className="task-section-actions"><span className="task-horizon-total">{items.filter(t => t.status !== 'completed').length} open</span><button className="task-section-add" aria-label={`Add ${group.title}`} title={`Add ${group.title}`} onClick={() => onAdd(group.horizon, 'personal')}><Plus size={19}/></button></div></div>
+        <div className="task-simple-list">
+          {loading ? <div className="task-empty">Loading tasks…</div> : items.length ? items.map(task => <EntryRow key={task.id} entry={task} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} />) : <div className="task-empty"><span>{group.horizon === 'today' ? 'Nothing on today’s list yet.' : 'Your longer-term list is clear.'}</span><button onClick={() => onAdd(group.horizon, 'personal')}>+ Add a task</button></div>}
+        </div>
       </section>
     })}
   </div>
