@@ -18,7 +18,9 @@ const modules = [
 ]
 const statusLabels = { active: 'To do', in_progress: 'In progress', completed: 'Completed', archived: 'Archived' }
 const todayISO = () => new Date().toLocaleDateString('en-CA')
-const emptyForm = (module) => ({ module, title: '', details: '', category: '', status: 'active', due_date: '', amount: '', duration_minutes: '', rating: '' })
+const emptyForm = (module) => ({ module, title: '', details: '', category: '', status: 'active', due_date: '', amount: '', duration_minutes: '', rating: '', task_horizon: 'today', task_area: 'personal' })
+const taskHorizon = (entry) => entry.task_horizon || (entry.due_date && entry.due_date > todayISO() ? 'long_term' : 'today')
+const taskArea = (entry) => entry.task_area || 'personal'
 const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value || 0))
 const niceDate = (value) => value ? new Date(value + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date'
 
@@ -78,17 +80,21 @@ function EntryModal({ initial, onClose, onSave, busy }) {
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}>
     <form className="entry-modal" onSubmit={submit}>
       <div className="modal-head"><div><span className="eyebrow muted">{initial.id ? 'EDIT RECORD' : 'NEW RECORD'}</span><h2>{initial.id ? 'Make an update' : 'Add to your hub'}</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={19} /></button></div>
-      <label>Section<select value={form.module} onChange={e => { set('module', e.target.value); set('category', '') }}>{modules.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
+      <label>Section<select value={form.module} onChange={e => { const module = e.target.value; set('module', module); set('category', ''); if (module === 'tasks') { set('task_horizon', 'today'); set('task_area', 'personal') } }}>{modules.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
       <label>Title<input autoFocus maxLength="200" value={form.title} onChange={e => set('title', e.target.value)} placeholder={form.module === 'spend' ? 'e.g. Lunch with friends' : form.module === 'career' ? 'e.g. Revise heat transfer fundamentals' : 'What would you like to record?'} required /></label>
       <div className="form-grid">
-        <label>{form.module === 'spend' ? 'Expense type' : form.module === 'career' ? 'Focus area' : form.module === 'entertainment' ? 'Format' : 'Category'}<input value={form.category} onChange={e => set('category', e.target.value)} placeholder={form.module === 'career' ? 'Mass transfer, DWSIM, internship…' : 'Optional'} /></label>
-        <label>{form.module === 'spend' ? 'Amount (₹)' : form.module === 'review' ? 'Time spent (minutes)' : form.module === 'entertainment' ? 'Rating (0–5)' : 'Status'}
-          {form.module === 'spend' ? <input type="number" min="0" step="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0.00" /> :
+        <label>{form.module === 'tasks' ? 'Time horizon' : form.module === 'spend' ? 'Expense type' : form.module === 'career' ? 'Focus area' : form.module === 'entertainment' ? 'Format' : 'Category'}
+          {form.module === 'tasks' ? <select value={form.task_horizon || 'today'} onChange={e => set('task_horizon', e.target.value)}><option value="today">To do for today</option><option value="long_term">Long-term task</option></select> : <input value={form.category} onChange={e => set('category', e.target.value)} placeholder={form.module === 'career' ? 'Mass transfer, DWSIM, internship…' : 'Optional'} />}
+        </label>
+        <label>{form.module === 'tasks' ? 'Task area' : form.module === 'spend' ? 'Amount (₹)' : form.module === 'review' ? 'Time spent (minutes)' : form.module === 'entertainment' ? 'Rating (0–5)' : 'Status'}
+          {form.module === 'tasks' ? <select value={form.task_area || 'personal'} onChange={e => set('task_area', e.target.value)}><option value="personal">Personal</option><option value="professional">Professional</option></select> :
+          form.module === 'spend' ? <input type="number" min="0" step="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0.00" /> :
           form.module === 'review' ? <input type="number" min="0" step="1" value={form.duration_minutes} onChange={e => set('duration_minutes', e.target.value)} placeholder="Minutes" /> :
           form.module === 'entertainment' ? <input type="number" min="0" max="5" step="0.5" value={form.rating} onChange={e => set('rating', e.target.value)} placeholder="e.g. 4.5" /> :
           <select value={form.status} onChange={e => set('status', e.target.value)}>{Object.entries(statusLabels).filter(([v]) => v !== 'archived').map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>}
         </label>
       </div>
+      {form.module === 'tasks' && <label>Task status<select value={form.status} onChange={e => set('status', e.target.value)}>{Object.entries(statusLabels).filter(([v]) => v !== 'archived').map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label>}
       <label>{form.module === 'spend' ? 'Date of spend' : form.module === 'review' ? 'Review date' : 'Due date'}<input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} /></label>
       <label>Notes<textarea rows="3" value={form.details} onChange={e => set('details', e.target.value)} placeholder={form.module === 'career' ? 'Key concept, next practice step, links or notes…' : 'Add a little context for future you…'} /></label>
       <div className="modal-actions"><button type="button" className="secondary-btn" onClick={onClose}>Cancel</button><button className="primary-btn" disabled={busy || !form.title.trim()}>{busy ? 'Saving…' : initial.id ? 'Save changes' : 'Save record'} <span>→</span></button></div>
@@ -140,7 +146,7 @@ function App() {
 
   const saveEntry = async (form) => {
     setBusy(true); setError('')
-    const payload = { module: form.module, title: form.title.trim(), details: form.details || '', category: form.category || '', status: form.status || 'active', due_date: form.due_date || null, amount: form.amount ?? null, duration_minutes: form.duration_minutes ?? null, rating: form.rating ?? null, user_id: session.user.id }
+    const payload = { module: form.module, title: form.title.trim(), details: form.details || '', category: form.category || '', status: form.status || 'active', due_date: form.due_date || null, amount: form.amount ?? null, duration_minutes: form.duration_minutes ?? null, rating: form.rating ?? null, task_horizon: form.module === 'tasks' ? (form.task_horizon || 'today') : null, task_area: form.module === 'tasks' ? (form.task_area || 'personal') : null, user_id: session.user.id }
     const result = form.id
       ? await supabase.from('entries').update(payload).eq('id', form.id).select().single()
       : await supabase.from('entries').insert(payload).select().single()
@@ -161,8 +167,8 @@ function App() {
     if (updateError) setError(updateError.message)
     else setEntries(old => old.map(e => e.id === entry.id ? data : e))
   }
-  const openCreate = (module = activeModule === 'dashboard' ? 'tasks' : activeModule) => { setEditing(emptyForm(module)); setShowModal(true) }
-  const openEdit = (entry) => { setEditing({ ...entry, amount: entry.amount ?? '', duration_minutes: entry.duration_minutes ?? '', rating: entry.rating ?? '', due_date: entry.due_date ?? '' }); setShowModal(true) }
+  const openCreate = (module = activeModule === 'dashboard' ? 'tasks' : activeModule, taskDefaults = {}) => { setEditing({ ...emptyForm(module), ...taskDefaults }); setShowModal(true) }
+  const openEdit = (entry) => { setEditing({ ...entry, task_horizon: taskHorizon(entry), task_area: taskArea(entry), amount: entry.amount ?? '', duration_minutes: entry.duration_minutes ?? '', rating: entry.rating ?? '', due_date: entry.due_date ?? '' }); setShowModal(true) }
 
   if (!authReady) return <div className="loading-screen"><div className="brand-mark"><Compass size={22} /></div><span>Preparing your space…</span></div>
   if (!session) return <AuthScreen />
@@ -198,18 +204,51 @@ function App() {
             return <button className="module-card" key={m.id} onClick={() => setActiveModule(m.id)}><div className={`module-icon ${m.color}`}><m.icon size={20} /></div><div className="module-card-copy"><h3>{m.label}</h3><p>{m.description}</p><span className="module-count">{count} {count === 1 ? 'record' : 'records'}</span></div><span className="module-arrow">↗</span></button>
           })}</section>
           <div className="section-row recent-heading"><div><h2>Recently added</h2><p>Your latest notes and next steps.</p></div><button className="text-btn" onClick={() => { setActiveModule('dashboard'); document.getElementById('records-area')?.scrollIntoView({ behavior: 'smooth' }) }}>View all <span>→</span></button></div>
-        </> : <section className="module-summary"><div className={`module-icon large ${moduleMeta?.color}`}>{moduleMeta && <moduleMeta.icon size={25} />}</div><div><strong>{entries.filter(e => e.module === activeModule).length} records</strong><p>{activeModule === 'career' ? 'Capture concepts from chemical engineering, simulation practice, technical skills, applications and interview preparation.' : activeModule === 'business' ? 'Save business ideas, experiments, decisions and next actions.' : activeModule === 'review' ? 'Log reflection notes and time spent. Small reviews help make your next day more intentional.' : activeModule === 'entertainment' ? 'Track films, books, music, games or experiences, with notes and ratings.' : activeModule === 'spend' ? 'Record expenses with an amount and date to build a clearer picture of your spending.' : 'Capture tasks, deadlines and small actions you want to complete.'}</p></div><div className="summary-progress"><span>{entries.filter(e => e.module === activeModule && e.status === 'completed').length} completed</span><div className="progress-track"><i style={{ width: `${entries.filter(e => e.module === activeModule).length ? entries.filter(e => e.module === activeModule && e.status === 'completed').length / entries.filter(e => e.module === activeModule).length * 100 : 0}%` }} /></div></div></section>}
-        <section id="records-area" className="records-panel">
+        </> : activeModule === 'tasks' ? <section className="task-intro"><div><span className="eyebrow muted">YOUR TO-DO LIST</span><h2>Make the next step clear.</h2><p>Separate what needs attention today from the things you’re working toward later.</p></div><div className="task-intro-count"><strong>{entries.filter(e => e.module === 'tasks' && e.status === 'completed').length}</strong><span>completed</span><i>{entries.filter(e => e.module === 'tasks' && e.status !== 'completed' && e.status !== 'archived').length} open tasks</i></div></section> : <section className="module-summary"><div className={`module-icon large ${moduleMeta?.color}`}>{moduleMeta && <moduleMeta.icon size={25} />}</div><div><strong>{entries.filter(e => e.module === activeModule).length} records</strong><p>{activeModule === 'career' ? 'Capture concepts from chemical engineering, simulation practice, technical skills, applications and interview preparation.' : activeModule === 'business' ? 'Save business ideas, experiments, decisions and next actions.' : activeModule === 'review' ? 'Log reflection notes and time spent. Small reviews help make your next day more intentional.' : activeModule === 'entertainment' ? 'Track films, books, music, games or experiences, with notes and ratings.' : activeModule === 'spend' ? 'Record expenses with an amount and date to build a clearer picture of your spending.' : 'Capture tasks, deadlines and small actions you want to complete.'}</p></div><div className="summary-progress"><span>{entries.filter(e => e.module === activeModule && e.status === 'completed').length} completed</span><div className="progress-track"><i style={{ width: `${entries.filter(e => e.module === activeModule).length ? entries.filter(e => e.module === activeModule && e.status === 'completed').length / entries.filter(e => e.module === activeModule).length * 100 : 0}%` }} /></div></div></section>}
+        {activeModule === 'tasks' ? <TaskBoard tasks={visibleEntries.filter(e => e.module === 'tasks')} loading={loading} onAdd={(horizon, area) => openCreate('tasks', { task_horizon: horizon, task_area: area })} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} /> : <section id="records-area" className="records-panel">
           <div className="records-header"><div><h2>{activeModule === 'dashboard' ? 'Your records' : 'Your ' + (moduleMeta?.short.toLowerCase() || 'records')}</h2><p>{visibleEntries.length} {visibleEntries.length === 1 ? 'entry' : 'entries'} saved in your space</p></div><div className="records-tools"><div className="search-box"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search records…" /></div>{activeModule === 'dashboard' && <button className="secondary-btn compact" onClick={() => openCreate('tasks')}><Plus size={16} /> Add</button>}</div></div>
           {loading ? <div className="empty-state"><div className="loading-spinner" /><p>Loading your records…</p></div> : visibleEntries.length === 0 ? <div className="empty-state"><div className="empty-icon"><BookOpen size={23} /></div><h3>{search ? 'No matching records' : 'A fresh page'}</h3><p>{search ? 'Try another search term.' : 'Your next step doesn’t have to be big. Add a record to get started.'}</p><button className="primary-btn" onClick={() => openCreate()}><Plus size={17} /> Add your first record</button></div> :
             <div className="entry-list">{visibleEntries.slice(0, activeModule === 'dashboard' ? 8 : 100).map(entry => <EntryRow key={entry.id} entry={entry} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} />)}</div>}
           {activeModule === 'dashboard' && visibleEntries.length > 8 && <button className="show-more" onClick={() => setActiveModule('tasks')}>Open Task Manager to see more <span>→</span></button>}
-        </section>
+        </section>}
         <footer className="page-footer"><span>ReConstruct <i>·</i> Your progress, in your hands.</span><span><span className="privacy-dot" /> Private workspace</span></footer>
       </div>
     </main>
     {showModal && editing && <EntryModal initial={editing} onClose={() => { setShowModal(false); setEditing(null) }} onSave={saveEntry} busy={busy} />}
     {toast && <div className="toast"><CheckCircle2 size={17} /> {toast}</div>}
+  </div>
+}
+
+function TaskBoard({ tasks, loading, onAdd, onEdit, onDelete, onToggle }) {
+  const groups = [
+    { horizon: 'today', area: 'personal', title: 'Personal', description: 'Life admin, routines and things for you', icon: '✦' },
+    { horizon: 'today', area: 'professional', title: 'Professional', description: 'Work, studies and responsibilities for today', icon: '↗' },
+    { horizon: 'long_term', area: 'personal', title: 'Personal', description: 'Goals and commitments for later', icon: '✦' },
+    { horizon: 'long_term', area: 'professional', title: 'Professional', description: 'Deadlines, submissions and future work', icon: '↗' },
+  ]
+  return <div className="task-board">
+    {['today', 'long_term'].map(horizon => {
+      const group = groups.filter(item => item.horizon === horizon)
+      const sectionTasks = tasks.filter(task => taskHorizon(task) === horizon && task.status !== 'archived')
+      return <section className={`task-horizon ${horizon}`} key={horizon}>
+        <div className="task-horizon-heading"><div><span className="eyebrow muted">{horizon === 'today' ? 'FOCUS NOW' : 'PLAN AHEAD'}</span><h2>{horizon === 'today' ? 'To do for today' : 'Long-term tasks'}</h2><p>{horizon === 'today' ? 'A clear list for the day in front of you.' : 'Keep future submissions, deadlines and commitments in sight.'}</p></div><span className="task-horizon-total">{sectionTasks.filter(t => t.status !== 'completed').length} open</span></div>
+        <div className="task-area-grid">{group.map(area => {
+          const items = sectionTasks.filter(task => taskArea(task) === area.area).sort((a,b) => {
+            if (horizon === 'long_term' && a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
+            if (horizon === 'long_term' && a.due_date) return -1
+            if (horizon === 'long_term' && b.due_date) return 1
+            return (b.created_at || '').localeCompare(a.created_at || '')
+          })
+          return <section className="task-area-card" key={area.area}>
+            <header className="task-area-heading"><div className={`task-area-icon ${area.area}`}>{area.icon}</div><div><h3>{area.title}</h3><p>{area.description}</p></div><span className="task-area-count">{items.filter(t => t.status !== 'completed').length}</span></header>
+            <div className="task-area-list">
+              {loading ? <div className="task-empty">Loading tasks…</div> : items.length ? items.map(task => <EntryRow key={task.id} entry={task} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} />) : <div className="task-empty"><span>{area.area === 'personal' ? 'A little space for yourself.' : 'Nothing on the list yet.'}</span><button onClick={() => onAdd(horizon, area.area)}>+ Add a task</button></div>}
+            </div>
+            {items.length > 0 && <button className="task-add-inline" onClick={() => onAdd(horizon, area.area)}><Plus size={14}/> Add task</button>}
+          </section>
+        })}</div>
+      </section>
+    })}
   </div>
 }
 
