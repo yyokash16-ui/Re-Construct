@@ -135,7 +135,7 @@ class MainActivity : Activity() {
         executor.execute {
             try {
                 val response = request("POST", "/auth/v1/token?grant_type=password", JSONObject().put("email", mail).put("password", pass), null)
-                prefs.edit().putString("access_token", response.getString("access_token")).putString("refresh_token", response.optString("refresh_token")).putString("email", mail).apply()
+                prefs.edit().putString("access_token", response.getString("access_token")).putString("refresh_token", response.optString("refresh_token")).putString("user_id", response.getJSONObject("user").getString("id")).putLong("expires_at", System.currentTimeMillis() + response.optLong("expires_in", 3600L) * 1000L).putString("email", mail).apply()
                 runOnUiThread { password.setText(""); status.text = "Signed in. Syncing daily totals…" }
                 refreshUsage()
                 syncUsage(true)
@@ -144,11 +144,13 @@ class MainActivity : Activity() {
     }
 
     private fun syncUsage(showMessage: Boolean) {
-        val token = prefs.getString("access_token", null) ?: run { if (showMessage) status.text = "Sign in to your ReConstruct account first."; return }
+        if (prefs.getString("access_token", null) == null) { if (showMessage) status.text = "Sign in to your ReConstruct account first."; return }
+        val userId = prefs.getString("user_id", null) ?: run { if (showMessage) status.text = "Please sign in again to link your account."; return }
         refreshUsage()
         val liveShorts = if (sessionStart > 0L) ((System.currentTimeMillis() - sessionStart) / 60000L).toInt() else 0
         val today = LocalDate.now().toString()
         val payload = JSONObject()
+            .put("user_id", userId)
             .put("usage_date", today)
             .put("youtube_minutes", youtubeMinutes)
             .put("shorts_minutes", shortsMinutes + liveShorts)
@@ -156,10 +158,21 @@ class MainActivity : Activity() {
             .put("source", "android_companion")
         executor.execute {
             try {
-                request("POST", "/rest/v1/youtube_daily_usage?on_conflict=user_id,usage_date", payload, token, "resolution=merge-duplicates,return=minimal")
+                request("POST", "/rest/v1/youtube_daily_usage?on_conflict=user_id,usage_date", payload, ensureAccessToken(), "resolution=merge-duplicates,return=minimal")
                 runOnUiThread { status.text = if (showMessage) "Synced $today to ReConstruct." else "Today's usage synced to ReConstruct." }
             } catch (e: Exception) { runOnUiThread { status.text = "Sync failed: ${e.message ?: "check connection"}" } }
         }
+    }
+
+    private fun ensureAccessToken(): String {
+        val token = prefs.getString("access_token", null) ?: throw IllegalStateException("Sign in first")
+        val expiresAt = prefs.getLong("expires_at", 0L)
+        if (expiresAt > System.currentTimeMillis() + 60000L) return token
+        val refresh = prefs.getString("refresh_token", null) ?: throw IllegalStateException("Session expired; sign in again")
+        val response = request("POST", "/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", refresh), null)
+        val nextToken = response.getString("access_token")
+        prefs.edit().putString("access_token", nextToken).putString("refresh_token", response.optString("refresh_token", refresh)).putLong("expires_at", System.currentTimeMillis() + response.optLong("expires_in", 3600L) * 1000L).apply()
+        return nextToken
     }
 
     private fun request(method: String, path: String, body: JSONObject?, token: String?, prefer: String? = null): JSONObject {
