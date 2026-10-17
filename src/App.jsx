@@ -79,8 +79,7 @@ function EntryModal({ initial, onClose, onSave, busy }) {
   const submit = (e) => { e.preventDefault(); onSave({ ...form, amount: form.amount === '' ? null : Number(form.amount), duration_minutes: form.duration_minutes === '' ? null : Number(form.duration_minutes), rating: form.rating === '' ? null : Number(form.rating), due_date: form.due_date || null }) }
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}>
     <form className="entry-modal" onSubmit={submit}>
-      <div className="modal-head"><div><span className="eyebrow muted">{initial.id ? 'EDIT RECORD' : 'NEW RECORD'}</span><h2>{initial.id ? 'Make an update' : 'Add to your hub'}</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={19} /></button></div>
-      <label>Section<select value={form.module} onChange={e => { const module = e.target.value; set('module', module); set('category', ''); if (module === 'tasks') { set('task_horizon', 'today'); set('task_area', 'personal') } }}>{modules.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
+      <div className="modal-head"><div><span className="eyebrow muted">{initial.id ? 'EDIT RECORD' : 'NEW RECORD'}</span><h2>{form.module === 'tasks' ? 'Task' : initial.id ? 'Make an update' : 'Add to your hub'}</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={19} /></button></div>
       <label>Title<input autoFocus maxLength="200" value={form.title} onChange={e => set('title', e.target.value)} placeholder={form.module === 'spend' ? 'e.g. Lunch with friends' : form.module === 'career' ? 'e.g. Revise heat transfer fundamentals' : 'What would you like to record?'} required /></label>
       {form.module === 'tasks' ? <>
         {form.task_horizon === 'long_term' && <label>Due date<input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} /></label>}
@@ -218,25 +217,30 @@ function App() {
 
 function TaskBoard({ tasks, loading, search, onSearch, onAdd, onEdit, onDelete, onToggle }) {
   const groups = [
-    { horizon: 'today', title: 'To do for today', description: 'A simple list for what you need to do today.' },
-    { horizon: 'long_term', title: 'Long-term tasks', description: 'Keep future tasks here, with a due date when needed.' },
+    { horizon: 'today', area: 'personal', title: 'Personal', description: 'Your personal tasks for today' },
+    { horizon: 'today', area: 'professional', title: 'Professional', description: 'Work and study tasks for today' },
+    { horizon: 'long_term', area: 'personal', title: 'Personal', description: 'Long-term personal goals' },
+    { horizon: 'long_term', area: 'professional', title: 'Professional', description: 'Long-term work and study goals' },
   ]
   return <div className="task-board">
     <div className="task-board-toolbar"><div className="search-box"><Search size={16}/><input value={search} onChange={e => onSearch(e.target.value)} placeholder="Search tasks…"/></div><span>Tasks stay private to your account</span></div>
-    {groups.map(group => {
-      const items = tasks.filter(task => taskHorizon(task) === group.horizon && task.status !== 'archived').sort((a,b) => {
-        if (group.horizon === 'long_term' && a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
-        if (group.horizon === 'long_term' && a.due_date) return -1
-        if (group.horizon === 'long_term' && b.due_date) return 1
-        return (b.created_at || '').localeCompare(a.created_at || '')
-      })
-      return <section className={`task-horizon ${group.horizon}`} key={group.horizon}>
-        <div className="task-horizon-heading"><div><span className="eyebrow muted">{group.horizon === 'today' ? 'FOCUS NOW' : 'PLAN AHEAD'}</span><h2>{group.title}</h2><p>{group.description}</p></div><div className="task-section-actions"><span className="task-horizon-total">{items.filter(t => t.status !== 'completed').length} open</span><button className="task-section-add" aria-label={`Add ${group.title}`} title={`Add ${group.title}`} onClick={() => onAdd(group.horizon, 'personal')}><Plus size={19}/></button></div></div>
-        <div className="task-simple-list">
-          {loading ? <div className="task-empty">Loading tasks…</div> : items.length ? items.map(task => <EntryRow key={task.id} entry={task} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} />) : <div className="task-empty"><span>{group.horizon === 'today' ? 'Nothing on today’s list yet.' : 'Your longer-term list is clear.'}</span><button onClick={() => onAdd(group.horizon, 'personal')}>+ Add a task</button></div>}
-        </div>
-      </section>
-    })}
+    {['today', 'long_term'].map(horizon => <section className={`task-horizon ${horizon}`} key={horizon}>
+      <div className="task-horizon-heading"><div><span className="eyebrow muted">{horizon === 'today' ? 'FOCUS NOW' : 'PLAN AHEAD'}</span><h2>{horizon === 'today' ? 'To do for today' : 'Long-term tasks'}</h2></div><span className="task-horizon-total">{tasks.filter(t => taskHorizon(t) === horizon && t.status !== 'completed' && t.status !== 'archived').length} open</span></div>
+      <div className="task-area-grid">{groups.filter(g => g.horizon === horizon).map(area => {
+        const items = tasks.filter(task => taskHorizon(task) === horizon && taskArea(task) === area.area && task.status !== 'archived').sort((a,b) => {
+          if (horizon === 'long_term' && a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
+          if (horizon === 'long_term' && a.due_date) return -1
+          if (horizon === 'long_term' && b.due_date) return 1
+          return (b.created_at || '').localeCompare(a.created_at || '')
+        })
+        return <section className="task-area-card" key={area.area}>
+          <header className="task-area-heading"><div className={`task-area-icon ${area.area}`}>{area.area === 'personal' ? '✦' : '↗'}</div><div><h3>{area.title}</h3><p>{area.description}</p></div><span className="task-area-count">{items.filter(t => t.status !== 'completed').length}</span><button type="button" className="task-section-add" aria-label={`Add ${area.title} task`} title={`Add ${area.title} task`} onClick={() => onAdd(horizon, area.area)}><Plus size={18}/></button></header>
+          <div className="task-simple-list">
+            {loading ? <div className="task-empty">Loading tasks…</div> : items.length ? items.map(task => <EntryRow key={task.id} entry={task} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} />) : <div className="task-empty"><span>{horizon === 'today' ? 'Nothing here yet.' : 'No long-term tasks yet.'}</span></div>}
+          </div>
+        </section>
+      })}</div>
+    </section>)}
   </div>
 }
 
