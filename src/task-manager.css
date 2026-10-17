@@ -51,3 +51,16 @@
 .task-simple-list .entry-main h3{font-size:13px}
 .task-simple-list .entry-main p{font-size:12px;line-height:1.6}
 @media(max-width:520px){.task-section-actions{gap:6px}.task-section-add{width:34px;height:34px;flex-basis:34px}.task-horizon-heading{gap:8px}}
+
+/* Keep task sections centered and fully visible within the content area */
+.task-board,.task-horizon,.task-area-grid,.task-area-card{box-sizing:border-box;min-width:0;max-width:100%}
+.task-board{width:100%;align-items:stretch}
+.task-horizon{width:100%;margin-inline:auto}
+.task-area-grid{width:100%;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.task-area-card{width:100%}
+.task-simple-list{min-width:0;width:100%}
+.task-simple-list .entry-row{width:100%;min-width:0}
+.task-simple-list .entry-main{min-width:0;overflow-wrap:anywhere}
+@media(max-width:1000px){
+  .task-area-grid{grid-template-columns:minmax(0,1fr)}
+}
