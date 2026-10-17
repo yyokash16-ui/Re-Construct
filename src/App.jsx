@@ -215,7 +215,7 @@ function SpendManager({ session, onError, onToast }) {
     <div className="spend-stat-grid">
       <div className="spend-stat expense"><span>Money spent</span><strong>{money(totalExpenses)}</strong><small>Expenses logged this month</small></div>
       <div className="spend-stat income"><span>Money received</span><strong>{money(totalIncome)}</strong><small>Income logged this month</small></div>
-      <div className="spend-stat positive"><span>Income minus expenses</span><strong>{money(net)}</strong><small>Transfers excluded</small></div>
+      <button type="button" className="spend-stat spend-lending-stat" onClick={() => setLendingOpen(true)}><span>People who owe me</span><strong>{money(outstanding)}</strong><small>{lendingRows.length} {lendingRows.length === 1 ? 'person' : 'lending records'} · tap to view or edit</small></button>
     </div>
     <div className="spend-section-heading"><div><h3>Account breakdown</h3><p>Monthly totals based on the transactions you log.</p></div></div>
     <div className="spend-account-grid">{accountStats.map(a => <div className="spend-account-card" key={a.account}><div className="spend-account-top"><span className={'account-dot ' + a.account.toLowerCase()}/><strong>{a.account === 'BOB' ? 'Bank of Baroda' : a.account === 'KOTAK' ? 'Kotak Mahindra' : 'Equitas'}</strong></div><div className="spend-account-expense"><small>Expenses</small><strong>{money(a.expenses)}</strong></div><div className="spend-account-foot"><span>Income {money(a.income)}</span><span>Transfer in {money(a.transfersIn)}</span></div><div className="spend-account-foot"><span>Transfer out {money(a.transfersOut)}</span></div></div>)}</div>
