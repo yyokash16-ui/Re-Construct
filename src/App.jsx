@@ -98,6 +98,111 @@ function EntryModal({ initial, onClose, onSave, busy }) {
   </div>
 }
 
+const SPEND_ACCOUNTS = ['EQUITAS', 'BOB', 'KOTAK'];
+const SPEND_CATEGORIES = ['Food & Drinks', 'Travel', 'Shopping', 'Bills & Utilities', 'Education', 'Health', 'Entertainment', 'Personal care', 'Fees & Charges', 'Other'];
+const blankSpendForm = () => ({ transaction_date: todayISO(), transaction_type: 'expense', account: 'EQUITAS', transfer_to: 'BOB', amount: '', category: 'Food & Drinks', description: '', notes: '' });
+
+function SpendManager({ session, onError, onToast }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [form, setForm] = useState(blankSpendForm());
+  const [editingId, setEditingId] = useState(null);
+  const [filterMonth, setFilterMonth] = useState(todayISO().slice(0, 7));
+  const [filterAccount, setFilterAccount] = useState('ALL');
+  const [filterType, setFilterType] = useState('expense');
+  const [filterText, setFilterText] = useState('');
+  const [reportMode, setReportMode] = useState('month');
+
+  const loadTransactions = async () => {
+    if (!session?.user?.id) return;
+    setLoading(true);
+    const { data, error: queryError } = await supabase.from('spend_transactions').select('*').order('transaction_date', { ascending: false }).order('created_at', { ascending: false });
+    if (queryError) onError(queryError.message);
+    else setRows(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { loadTransactions(); }, [session?.user?.id]);
+
+  const monthRows = useMemo(() => rows.filter(r => (r.transaction_date || '').slice(0, 7) === filterMonth), [rows, filterMonth]);
+  const monthExpenses = monthRows.filter(r => r.transaction_type === 'expense');
+  const monthIncome = monthRows.filter(r => r.transaction_type === 'income');
+  const totalExpenses = monthExpenses.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const totalIncome = monthIncome.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const net = totalIncome - totalExpenses;
+  const accountStats = SPEND_ACCOUNTS.map(account => {
+    const expenses = monthExpenses.filter(r => r.account === account).reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const income = monthIncome.filter(r => r.account === account).reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const transfersIn = monthRows.filter(r => r.transaction_type === 'transfer' && r.transfer_to === account).reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const transfersOut = monthRows.filter(r => r.transaction_type === 'transfer' && r.account === account).reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    return { account, expenses, income, transfersIn, transfersOut };
+  });
+  const categoryStats = Object.entries(monthExpenses.reduce((acc, r) => {
+    const category = r.category || 'Other';
+    acc[category] = (acc[category] || 0) + Number(r.amount || 0);
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1]);
+  const filteredRows = rows.filter(r => {
+    const matchesMonth = reportMode === 'all' || (r.transaction_date || '').slice(0, 7) === filterMonth;
+    const matchesAccount = filterAccount === 'ALL' || r.account === filterAccount || r.transfer_to === filterAccount;
+    const matchesType = filterType === 'all' || r.transaction_type === filterType;
+    const q = filterText.trim().toLowerCase();
+    return matchesMonth && matchesAccount && matchesType && (!q || [r.description, r.category, r.notes, r.account, r.transfer_to].some(v => (v || '').toLowerCase().includes(q)));
+  });
+  const startNew = () => { setForm(blankSpendForm()); setEditingId(null); setFormOpen(true); };
+  const startEdit = row => {
+    setForm({ transaction_date: row.transaction_date, transaction_type: row.transaction_type, account: row.account, transfer_to: row.transfer_to || 'BOB', amount: String(row.amount), category: row.category || 'Other', description: row.description || '', notes: row.notes || '' });
+    setEditingId(row.id); setFormOpen(true);
+  };
+  const save = async event => {
+    event.preventDefault();
+    const amount = Number(form.amount);
+    if (!form.transaction_date || !form.description.trim() || !Number.isFinite(amount) || amount <= 0) { onError('Enter a date, description and amount greater than zero.'); return; }
+    if (form.transaction_type === 'transfer' && form.account === form.transfer_to) { onError('Choose two different accounts for a transfer.'); return; }
+    setSaving(true);
+    const payload = { user_id: session.user.id, transaction_date: form.transaction_date, transaction_type: form.transaction_type, account: form.account, transfer_to: form.transaction_type === 'transfer' ? form.transfer_to : null, amount, category: form.transaction_type === 'income' ? (form.category || 'Income') : form.transaction_type === 'transfer' ? 'Transfers' : (form.category || 'Other'), description: form.description.trim(), notes: form.notes.trim(), updated_at: new Date().toISOString() };
+    const result = editingId ? await supabase.from('spend_transactions').update(payload).eq('id', editingId).select().single() : await supabase.from('spend_transactions').insert(payload).select().single();
+    setSaving(false);
+    if (result.error) { onError(result.error.message); return; }
+    setRows(old => editingId ? old.map(r => r.id === editingId ? result.data : r) : [result.data, ...old]);
+    setFormOpen(false); setEditingId(null); onToast(editingId ? 'Transaction updated' : 'Transaction saved');
+  };
+  const remove = async row => {
+    if (!window.confirm('Delete this transaction? This cannot be undone.')) return;
+    const { error: deleteError } = await supabase.from('spend_transactions').delete().eq('id', row.id);
+    if (deleteError) onError(deleteError.message);
+    else { setRows(old => old.filter(r => r.id !== row.id)); onToast('Transaction deleted'); }
+  };
+
+  return <div className="spend-manager">
+    <div className="spend-toolbar"><div><span className="eyebrow muted">DAILY MONEY LOG</span><h2>Every rupee, accounted for.</h2><p>Log expenses, income and transfers across your three bank accounts.</p></div><button className="primary-btn" onClick={startNew}><Plus size={17}/> Add transaction</button></div>
+    <div className="spend-month-control"><label>Report month<input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)}/></label><span>{monthRows.length} transactions in this month</span></div>
+    <div className="spend-stat-grid">
+      <div className="spend-stat expense"><span>Money spent</span><strong>{money(totalExpenses)}</strong><small>Expenses logged this month</small></div>
+      <div className="spend-stat income"><span>Money received</span><strong>{money(totalIncome)}</strong><small>Income logged this month</small></div>
+      <div className="spend-stat positive"><span>Income minus expenses</span><strong>{money(net)}</strong><small>Transfers excluded</small></div>
+    </div>
+    <div className="spend-section-heading"><div><h3>Account breakdown</h3><p>Monthly totals based on the transactions you log.</p></div></div>
+    <div className="spend-account-grid">{accountStats.map(a => <div className="spend-account-card" key={a.account}><div className="spend-account-top"><span className={'account-dot ' + a.account.toLowerCase()}/><strong>{a.account === 'BOB' ? 'Bank of Baroda' : a.account === 'KOTAK' ? 'Kotak Mahindra' : 'Equitas'}</strong></div><div className="spend-account-expense"><small>Expenses</small><strong>{money(a.expenses)}</strong></div><div className="spend-account-foot"><span>Income {money(a.income)}</span><span>Transfer in {money(a.transfersIn)}</span></div><div className="spend-account-foot"><span>Transfer out {money(a.transfersOut)}</span></div></div>)}</div>
+    <div className="spend-report-grid">
+      <section className="spend-report-card"><div className="spend-section-heading"><div><h3>Where your money went</h3><p>Expense categories for {filterMonth}</p></div></div>{categoryStats.length ? <div className="spend-category-list">{categoryStats.map(([category, amount]) => <div className="spend-category-row" key={category}><div><span>{category}</span><strong>{money(amount)}</strong></div><div className="spend-category-track"><i style={{width: (totalExpenses ? amount / totalExpenses * 100 : 0) + '%'}}/></div><small>{totalExpenses ? (amount / totalExpenses * 100).toFixed(1) : '0.0'}%</small></div>)}</div> : <div className="spend-empty-small">No expenses logged for this month yet.</div>}</section>
+      <section className="spend-report-card"><div className="spend-section-heading"><div><h3>Daily spending</h3><p>Top 10 latest dates this month</p></div></div>{(() => { const daily = Object.entries(monthExpenses.reduce((acc, r) => { acc[r.transaction_date] = (acc[r.transaction_date] || 0) + Number(r.amount || 0); return acc; }, {})).sort((a,b) => b[0].localeCompare(a[0])).slice(0, 10); return daily.length ? <div className="spend-daily-list">{daily.map(([date, amount]) => <div key={date}><span>{niceDate(date)}</span><strong>{money(amount)}</strong></div>)}</div> : <div className="spend-empty-small">Daily totals will appear after you log expenses.</div>; })()}</section>
+    </div>
+    <section className="spend-transactions"><div className="spend-section-heading"><div><h3>Transaction history</h3><p>{filteredRows.length} matching records · edit or delete entries as needed</p></div></div>
+      <div className="spend-filter-row"><input type="search" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Search description, category…"/><select value={reportMode} onChange={e => setReportMode(e.target.value)}><option value="month">Selected month</option><option value="all">All dates</option></select><select value={filterAccount} onChange={e => setFilterAccount(e.target.value)}><option value="ALL">All accounts</option>{SPEND_ACCOUNTS.map(a => <option key={a} value={a}>{a}</option>)}<option value="UNASSIGNED">Older / unassigned</option></select><select value={filterType} onChange={e => setFilterType(e.target.value)}><option value="all">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="transfer">Transfers</option></select></div>
+      {loading ? <div className="spend-empty-small">Loading transactions…</div> : filteredRows.length ? <div className="spend-table-wrap"><table className="spend-table"><thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Type</th><th>Category</th><th>Amount</th><th></th></tr></thead><tbody>{filteredRows.slice(0, 250).map(r => <tr key={r.id}><td>{niceDate(r.transaction_date)}</td><td><strong>{r.description}</strong>{r.notes && <small>{r.notes}</small>}</td><td>{r.transaction_type === 'transfer' ? <>{r.account} → {r.transfer_to}</> : r.account}</td><td><span className={'spend-type-tag ' + r.transaction_type}>{r.transaction_type}</span></td><td>{r.category || 'Other'}</td><td className={r.transaction_type === 'expense' ? 'spend-amount-out' : r.transaction_type === 'income' ? 'spend-amount-in' : ''}>{money(r.amount)}</td><td><div className="spend-row-actions"><button title="Edit" onClick={() => startEdit(r)}><Pencil size={15}/></button><button title="Delete" onClick={() => remove(r)}><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div> : <div className="spend-empty-small">No matching transactions. Add your first entry above.</div>}
+    </section>
+    {formOpen && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setFormOpen(false)}><form className="entry-modal spend-entry-modal" onSubmit={save}><div className="modal-head"><div><span className="eyebrow muted">{editingId ? 'EDIT TRANSACTION' : 'DAILY MONEY LOG'}</span><h2>{editingId ? 'Update transaction' : 'Add transaction'}</h2></div><button type="button" className="icon-btn" onClick={() => setFormOpen(false)}><X size={19}/></button></div>
+      <div className="spend-type-selector"><button type="button" className={form.transaction_type === 'expense' ? 'selected' : ''} onClick={() => setForm(v => ({...v, transaction_type:'expense', category:'Food & Drinks'}))}>Expense</button><button type="button" className={form.transaction_type === 'income' ? 'selected' : ''} onClick={() => setForm(v => ({...v, transaction_type:'income', category:'Income'}))}>Income</button><button type="button" className={form.transaction_type === 'transfer' ? 'selected' : ''} onClick={() => setForm(v => ({...v, transaction_type:'transfer', category:'Transfers'}))}>Transfer</button></div>
+      <div className="form-grid"><label>Date<input type="date" value={form.transaction_date} onChange={e => setForm(v => ({...v, transaction_date:e.target.value}))} required/></label><label>Amount (₹)<input type="number" min="0.01" step="0.01" value={form.amount} onChange={e => setForm(v => ({...v, amount:e.target.value}))} placeholder="0.00" required/></label></div>
+      <div className="form-grid"><label>{form.transaction_type === 'transfer' ? 'From account' : 'Account'}<select value={form.account} onChange={e => setForm(v => ({...v, account:e.target.value, transfer_to: v.transfer_to === e.target.value ? SPEND_ACCOUNTS.find(a => a !== e.target.value) || 'BOB' : v.transfer_to}))}>{SPEND_ACCOUNTS.map(a => <option key={a} value={a}>{a === 'BOB' ? 'Bank of Baroda (BOB)' : a === 'KOTAK' ? 'Kotak Mahindra' : 'Equitas'}</option>)}</select></label>{form.transaction_type === 'transfer' ? <label>To account<select value={form.transfer_to} onChange={e => setForm(v => ({...v, transfer_to:e.target.value}))}>{SPEND_ACCOUNTS.filter(a => a !== form.account).map(a => <option key={a} value={a}>{a === 'BOB' ? 'Bank of Baroda (BOB)' : a === 'KOTAK' ? 'Kotak Mahindra' : 'Equitas'}</option>)}</select></label> : <label>Category<select value={form.category} onChange={e => setForm(v => ({...v, category:e.target.value}))}>{(form.transaction_type === 'income' ? ['Income','Salary / Stipend','Interest','Refund','Gift','Other income'] : SPEND_CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}</select></label>}</div>
+      <label>Description<input maxLength="200" value={form.description} onChange={e => setForm(v => ({...v, description:e.target.value}))} placeholder={form.transaction_type === 'expense' ? 'e.g. Lunch, bus ticket, groceries' : form.transaction_type === 'income' ? 'e.g. stipend, refund' : 'e.g. Move money to another account'} required/></label><label>Notes (optional)<textarea rows="2" value={form.notes} onChange={e => setForm(v => ({...v, notes:e.target.value}))} placeholder="Extra details, bill reference, etc."/></label>
+      <div className="modal-actions"><button type="button" className="secondary-btn" onClick={() => setFormOpen(false)}>Cancel</button><button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Save transaction'} <span>→</span></button></div>
+    </form></div>}
+  </div>;
+}
+
 function App() {
   const [session, setSession] = useState(null)
   const [authReady, setAuthReady] = useState(false)
@@ -208,7 +313,8 @@ function App() {
           })}
         </section> : <section className="module-summary"><div className={`module-icon large ${moduleMeta?.color}`}>{moduleMeta && <moduleMeta.icon size={25} />}</div><div><strong>{entries.filter(e => e.module === activeModule).length} records</strong><p>{activeModule === 'career' ? 'Capture concepts from chemical engineering, simulation practice, technical skills, applications and interview preparation.' : activeModule === 'business' ? 'Save business ideas, experiments, decisions and next actions.' : activeModule === 'review' ? 'Log reflection notes and time spent. Small reviews help make your next day more intentional.' : activeModule === 'entertainment' ? 'Track films, books, music, games or experiences, with notes and ratings.' : activeModule === 'spend' ? 'Record expenses with an amount and date to build a clearer picture of your spending.' : 'Capture tasks, deadlines and small actions you want to complete.'}</p></div><div className="summary-progress"><span>{entries.filter(e => e.module === activeModule && e.status === 'completed').length} completed</span><div className="progress-track"><i style={{ width: `${entries.filter(e => e.module === activeModule).length ? entries.filter(e => e.module === activeModule && e.status === 'completed').length / entries.filter(e => e.module === activeModule).length * 100 : 0}%` }} /></div></div></section>}
         {activeModule === 'entertainment' && <YouTubeUsagePanel session={session} />}
-        {activeModule === 'tasks' ? <TaskBoard tasks={visibleEntries.filter(e => e.module === 'tasks')} loading={loading} search={search} onSearch={setSearch} onAdd={(horizon, area) => openCreate('tasks', { task_horizon: horizon, task_area: area })} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} /> : <section id="records-area" className="records-panel">
+        {activeModule === 'spend' && <SpendManager session={session} onError={setError} onToast={(message) => { setToast(message); window.setTimeout(() => setToast(''), 2800); }} />}
+        {activeModule === 'spend' ? null : activeModule === 'tasks' ? <TaskBoard tasks={visibleEntries.filter(e => e.module === 'tasks')} loading={loading} search={search} onSearch={setSearch} onAdd={(horizon, area) => openCreate('tasks', { task_horizon: horizon, task_area: area })} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} /> : <section id="records-area" className="records-panel">
           <div className="records-header"><div><h2>{activeModule === 'dashboard' ? 'Your records' : 'Your ' + (moduleMeta?.short.toLowerCase() || 'records')}</h2><p>{visibleEntries.length} {visibleEntries.length === 1 ? 'entry' : 'entries'} saved in your space</p></div><div className="records-tools"><div className="search-box"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search records…" /></div>{activeModule === 'dashboard' && <button className="secondary-btn compact" onClick={() => openCreate('tasks')}><Plus size={16} /> Add</button>}</div></div>
           {loading ? <div className="empty-state"><div className="loading-spinner" /><p>Loading your records…</p></div> : visibleEntries.length === 0 ? <div className="empty-state"><div className="empty-icon"><BookOpen size={23} /></div><h3>{search ? 'No matching records' : 'A fresh page'}</h3><p>{search ? 'Try another search term.' : 'Your next step doesn’t have to be big. Add a record to get started.'}</p><button className="primary-btn" onClick={() => openCreate()}><Plus size={17} /> Add your first record</button></div> :
             <div className="entry-list">{visibleEntries.slice(0, activeModule === 'dashboard' ? 8 : 100).map(entry => <EntryRow key={entry.id} entry={entry} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} />)}</div>}
