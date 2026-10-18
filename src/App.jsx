@@ -102,6 +102,87 @@ const SPEND_ACCOUNTS = ['EQUITAS', 'BOB', 'KOTAK'];
 const SPEND_CATEGORIES = ['Food & Drinks', 'Travel', 'Shopping', 'Bills & Utilities', 'Education', 'Health', 'Entertainment', 'Personal care', 'Fees & Charges', 'Other'];
 const blankSpendForm = () => ({ transaction_date: todayISO(), transaction_type: 'expense', account: 'EQUITAS', transfer_to: 'BOB', amount: '', category: 'Food & Drinks', description: '', notes: '' });
 
+function CareerJournal({ session, onError, onToast }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [activeType, setActiveType] = useState('study');
+  const [editingId, setEditingId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({ entry_date: todayISO(), entry_type: 'study', title: '', topic: '', content: '', duration_minutes: '', project_name: 'DWSIM H₂ production from biogas (SMR)' });
+
+  const loadEntries = async () => {
+    if (!session?.user?.id) return;
+    setLoading(true);
+    const { data, error } = await supabase.from('career_journal').select('*').order('entry_date', { ascending: false }).order('updated_at', { ascending: false });
+    if (error) onError(error.message); else setEntries(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { loadEntries(); }, [session?.user?.id]);
+  const filtered = entries.filter(row => (row.entry_type === activeType) && (!search.trim() || [row.title, row.topic, row.content, row.project_name].some(v => (v || '').toLowerCase().includes(search.trim().toLowerCase()))));
+  const resetForm = type => {
+    setEditingId(null);
+    setForm({ entry_date: todayISO(), entry_type: type, title: '', topic: '', content: '', duration_minutes: '', project_name: 'DWSIM H₂ production from biogas (SMR)' });
+  };
+  const editEntry = row => {
+    setEditingId(row.id); setActiveType(row.entry_type);
+    setForm({ entry_date: row.entry_date, entry_type: row.entry_type, title: row.title || '', topic: row.topic || '', content: row.content || '', duration_minutes: row.duration_minutes == null ? '' : String(row.duration_minutes), project_name: row.project_name || '' });
+  };
+  const saveEntry = async event => {
+    event.preventDefault();
+    if (!form.content.trim()) { onError('Write your notes or progress before saving.'); return; }
+    setSaving(true);
+    const payload = {
+      user_id: session.user.id, entry_date: form.entry_date || todayISO(), entry_type: form.entry_type,
+      title: form.title.trim() || (form.entry_type === 'study' ? (form.topic.trim() || 'Study session') : form.entry_type === 'project' ? 'Project progress update' : 'Quick note'),
+      topic: form.topic.trim(), content: form.content.trim(),
+      duration_minutes: form.entry_type === 'study' && form.duration_minutes !== '' ? Number(form.duration_minutes) : null,
+      project_name: form.entry_type === 'project' ? (form.project_name.trim() || 'Project work') : '',
+      updated_at: new Date().toISOString()
+    };
+    const result = editingId
+      ? await supabase.from('career_journal').update(payload).eq('id', editingId).select().single()
+      : await supabase.from('career_journal').insert(payload).select().single();
+    setSaving(false);
+    if (result.error) { onError(result.error.message); return; }
+    setEntries(old => editingId ? old.map(row => row.id === editingId ? result.data : row) : [result.data, ...old]);
+    setEditingId(null);
+    setForm(v => ({ ...v, title: '', topic: '', content: '', duration_minutes: '' }));
+    onToast(editingId ? 'Journal entry updated' : 'Journal entry saved');
+  };
+  const deleteEntry = async row => {
+    if (!window.confirm('Delete this journal entry?')) return;
+    const { error } = await supabase.from('career_journal').delete().eq('id', row.id);
+    if (error) onError(error.message);
+    else { setEntries(old => old.filter(item => item.id !== row.id)); if (editingId === row.id) resetForm(activeType); onToast('Journal entry deleted'); }
+  };
+  const typeLabels = { study: 'Study session', notes: 'Notes', project: 'Project work' };
+  const typeCounts = { study: entries.filter(r => r.entry_type === 'study').length, notes: entries.filter(r => r.entry_type === 'notes').length, project: entries.filter(r => r.entry_type === 'project').length };
+  const studyMinutes = entries.filter(r => r.entry_type === 'study').reduce((sum, r) => sum + Number(r.duration_minutes || 0), 0);
+
+  return <div className="career-journal">
+    <div className="career-welcome"><div><span className="eyebrow muted">YOUR CHEMICAL ENGINEERING NOTEBOOK</span><h2>Study it. Write it. Build it.</h2><p>Keep your subject notes, study sessions and actual project progress in one place. Write naturally in your own words—no long checklist to fill out.</p></div><div className="career-study-total"><BookOpen size={20}/><strong>{Math.floor(studyMinutes / 60)}h {studyMinutes % 60}m</strong><small>Study time recorded</small></div></div>
+    <div className="career-journal-tabs">{[['study','Study session'],['notes','Notes'],['project','Project work']].map(([type,label]) => <button type="button" key={type} className={activeType === type ? 'active' : ''} onClick={() => { setActiveType(type); resetForm(type); }}>{label}<span>{typeCounts[type]}</span></button>)}</div>
+    <div className="career-journal-layout">
+      <form className="career-write-card" onSubmit={saveEntry}>
+        <div className="career-write-head"><div><span className="eyebrow muted">{editingId ? 'EDIT YOUR ENTRY' : 'YOUR WRITING SPACE'}</span><h3>{editingId ? 'Continue writing' : activeType === 'study' ? 'What did you study today?' : activeType === 'notes' ? 'Write down your notes' : 'What happened in your project?'}</h3></div>{editingId && <button type="button" className="secondary-btn" onClick={() => resetForm(activeType)}>New entry</button>}</div>
+        <div className="career-light-fields">
+          <label>Date<input type="date" value={form.entry_date} onChange={e => setForm(v => ({...v, entry_date:e.target.value}))} required/></label>
+          {activeType === 'study' && <label>Topic / subject <input value={form.topic} onChange={e => setForm(v => ({...v, topic:e.target.value}))} placeholder="e.g. Mass transfer — packed columns"/></label>}
+          {activeType === 'project' && <label>Project <input value={form.project_name} onChange={e => setForm(v => ({...v, project_name:e.target.value}))} placeholder="Project name"/></label>}
+          {activeType === 'study' && <label>Study time (minutes, optional)<input type="number" min="0" step="1" value={form.duration_minutes} onChange={e => setForm(v => ({...v, duration_minutes:e.target.value}))} placeholder="e.g. 45"/></label>}
+        </div>
+        <input className="career-entry-title" value={form.title} onChange={e => setForm(v => ({...v, title:e.target.value}))} placeholder={activeType === 'study' ? 'Give this session a title (optional)' : activeType === 'notes' ? 'Note title (optional)' : 'Short project update title (optional)'}/>
+        <textarea className="career-writing-area" value={form.content} onChange={e => setForm(v => ({...v, content:e.target.value}))} placeholder={activeType === 'study' ? 'Write what you learnt, concepts you understood, equations, doubts to revisit, examples you worked through…' : activeType === 'notes' ? 'Write freely. Add your class notes, definitions, formulas, explanations, questions or ideas…' : 'Write what you actually did, the simulation/process conditions, values observed, errors, changes made, results, what worked or failed, and the next step…'} required/>
+        <div className="career-write-footer"><span>Your writing saves to your private ReConstruct account.</span><button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Update entry' : 'Save entry'} <span>→</span></button></div>
+      </form>
+      <section className="career-journal-history"><div className="career-history-head"><div><span className="eyebrow muted">YOUR NOTEBOOK</span><h3>{typeLabels[activeType]} history</h3></div><strong>{filtered.length}</strong></div><div className="career-history-search"><Search size={15}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search your writing…"/></div>
+        {loading ? <div className="spend-empty-small">Loading your notebook…</div> : filtered.length ? <div className="career-entry-list">{filtered.map(row => <article className={'career-entry-card ' + (editingId === row.id ? 'editing' : '')} key={row.id}><div className="career-entry-card-top"><span>{niceDate(row.entry_date)}</span>{row.entry_type === 'study' && row.duration_minutes != null && <span>{row.duration_minutes} min</span>}</div><h4>{row.title}</h4>{row.topic && <span className="career-topic-chip">{row.topic}</span>}{row.entry_type === 'project' && row.project_name && <span className="career-topic-chip">{row.project_name}</span>}<p>{row.content}</p><div className="career-entry-actions"><button type="button" onClick={() => editEntry(row)}><Pencil size={14}/> Edit and continue</button><button type="button" onClick={() => deleteEntry(row)}><Trash2 size={14}/> Delete</button></div></article>)}</div> : <div className="career-journal-empty"><BookOpen size={23}/><strong>No entries here yet</strong><p>Start writing in the panel. Your saved entries will appear here.</p></div>}
+      </section>
+    </div>
+  </div>;
+}
+
 function SpendManager({ session, onError, onToast }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -332,7 +413,7 @@ function App() {
     <main className="main-area">
       <header className="topbar"><div className="topbar-left"><button className="mobile-menu icon-btn" onClick={() => setMobileNav(true)}><Menu size={20} /></button><div className="breadcrumb">Workspace <span>/</span> <strong>{heading}</strong></div></div><div className="topbar-right">{activeModule !== 'tasks' && <><div className="today-pill"><CalendarDays size={15} /> {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</div>{activeModule !== 'spend' && <button className="top-add" onClick={() => openCreate()}><Plus size={17} /> <span>New record</span></button>}</>}</div></header>
       <div className="page-content">
-        <section className="page-heading"><div><div className="eyebrow muted">{activeModule === 'dashboard' ? 'A CLEARER VIEW OF YOUR DAY' : 'YOUR PERSONAL WORKSPACE'}</div><h1>{heading}<span className="heading-period">.</span></h1><p>{activeModule === 'dashboard' ? 'A little structure for everything you’re building.' : moduleMeta?.description}</p></div>{activeModule !== 'dashboard' && activeModule !== 'tasks' && activeModule !== 'spend' && <button className="primary-btn" onClick={() => openCreate()}><Plus size={17} /> Add new</button>}</section>
+        <section className="page-heading"><div><div className="eyebrow muted">{activeModule === 'dashboard' ? 'A CLEARER VIEW OF YOUR DAY' : 'YOUR PERSONAL WORKSPACE'}</div><h1>{heading}<span className="heading-period">.</span></h1><p>{activeModule === 'dashboard' ? 'A little structure for everything you’re building.' : moduleMeta?.description}</p></div>{activeModule !== 'dashboard' && activeModule !== 'tasks' && activeModule !== 'spend' && activeModule !== 'career' && <button className="primary-btn" onClick={() => openCreate()}><Plus size={17} /> Add new</button>}</section>
         {error && <div className="error-banner"><CircleHelp size={17} /><span>{error}</span><button onClick={() => setError('')}><X size={16} /></button></div>}
         {activeModule === 'dashboard' ? <>
           <section className="welcome-banner"><div className="welcome-copy"><span className="welcome-tag"><Sparkles size={14} /> YOUR SPACE, YOUR PACE</span><h2>Build a life that feels<br />like <em>your own.</em></h2><p>Make progress in the things that matter, one day at a time.</p><button onClick={() => openCreate('tasks')} className="welcome-btn">Capture a task <span>↗</span></button></div><div className="welcome-graphic"><div className="graphic-ring ring-one" /><div className="graphic-ring ring-two" /><div className="graphic-core"><Compass size={42} strokeWidth={1.3} /></div><div className="float-note note-one"><CheckCircle2 size={15} /> One thing at a time</div><div className="float-note note-two"><TrendingUp size={15} /> Keep growing</div></div></section>
@@ -354,10 +435,11 @@ function App() {
             const done = todayTasks.filter(e => e.status === 'completed').length
             return <div className={`task-progress-card ${area}`} key={area}><div className="task-progress-label"><span className={`task-area-icon ${area}`}>{area === 'personal' ? '✦' : '↗'}</span><strong>{area === 'personal' ? 'Personal tasks' : 'Professional tasks'}</strong></div><div className="task-progress-numbers"><strong>{done}</strong><span>completed</span><i>/</i><strong>{todayTasks.length}</strong><span>entered</span></div><div className="task-progress-track"><i style={{width: `${todayTasks.length ? done / todayTasks.length * 100 : 0}%`}} /></div></div>
           })}
-        </section> : activeModule === 'spend' ? null : <section className="module-summary"><div className={`module-icon large ${moduleMeta?.color}`}>{moduleMeta && <moduleMeta.icon size={25} />}</div><div><strong>{entries.filter(e => e.module === activeModule).length} records</strong><p>{activeModule === 'career' ? 'Capture concepts from chemical engineering, simulation practice, technical skills, applications and interview preparation.' : activeModule === 'business' ? 'Save business ideas, experiments, decisions and next actions.' : activeModule === 'review' ? 'Log reflection notes and time spent. Small reviews help make your next day more intentional.' : activeModule === 'entertainment' ? 'Track films, books, music, games or experiences, with notes and ratings.' : activeModule === 'spend' ? 'Record expenses with an amount and date to build a clearer picture of your spending.' : 'Capture tasks, deadlines and small actions you want to complete.'}</p></div><div className="summary-progress"><span>{entries.filter(e => e.module === activeModule && e.status === 'completed').length} completed</span><div className="progress-track"><i style={{ width: `${entries.filter(e => e.module === activeModule).length ? entries.filter(e => e.module === activeModule && e.status === 'completed').length / entries.filter(e => e.module === activeModule).length * 100 : 0}%` }} /></div></div></section>}
+        </section> : activeModule === 'spend' || activeModule === 'career' ? null : <section className="module-summary"><div className={`module-icon large ${moduleMeta?.color}`}>{moduleMeta && <moduleMeta.icon size={25} />}</div><div><strong>{entries.filter(e => e.module === activeModule).length} records</strong><p>{activeModule === 'career' ? 'Capture concepts from chemical engineering, simulation practice, technical skills, applications and interview preparation.' : activeModule === 'business' ? 'Save business ideas, experiments, decisions and next actions.' : activeModule === 'review' ? 'Log reflection notes and time spent. Small reviews help make your next day more intentional.' : activeModule === 'entertainment' ? 'Track films, books, music, games or experiences, with notes and ratings.' : activeModule === 'spend' ? 'Record expenses with an amount and date to build a clearer picture of your spending.' : 'Capture tasks, deadlines and small actions you want to complete.'}</p></div><div className="summary-progress"><span>{entries.filter(e => e.module === activeModule && e.status === 'completed').length} completed</span><div className="progress-track"><i style={{ width: `${entries.filter(e => e.module === activeModule).length ? entries.filter(e => e.module === activeModule && e.status === 'completed').length / entries.filter(e => e.module === activeModule).length * 100 : 0}%` }} /></div></div></section>}
         {activeModule === 'entertainment' && <YouTubeUsagePanel session={session} />}
         {activeModule === 'spend' && <SpendManager session={session} onError={setError} onToast={(message) => { setToast(message); window.setTimeout(() => setToast(''), 2800); }} />}
-        {activeModule === 'spend' ? null : activeModule === 'tasks' ? <TaskBoard tasks={visibleEntries.filter(e => e.module === 'tasks')} loading={loading} search={search} onSearch={setSearch} onAdd={(horizon, area) => openCreate('tasks', { task_horizon: horizon, task_area: area })} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} /> : <section id="records-area" className="records-panel">
+        {activeModule === 'career' && <CareerJournal session={session} onError={setError} onToast={(message) => { setToast(message); window.setTimeout(() => setToast(''), 2800); }} />}
+        {activeModule === 'spend' || activeModule === 'career' ? null : activeModule === 'tasks' ? <TaskBoard tasks={visibleEntries.filter(e => e.module === 'tasks')} loading={loading} search={search} onSearch={setSearch} onAdd={(horizon, area) => openCreate('tasks', { task_horizon: horizon, task_area: area })} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} /> : <section id="records-area" className="records-panel">
           <div className="records-header"><div><h2>{activeModule === 'dashboard' ? 'Your records' : 'Your ' + (moduleMeta?.short.toLowerCase() || 'records')}</h2><p>{visibleEntries.length} {visibleEntries.length === 1 ? 'entry' : 'entries'} saved in your space</p></div><div className="records-tools"><div className="search-box"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search records…" /></div>{activeModule === 'dashboard' && <button className="secondary-btn compact" onClick={() => openCreate('tasks')}><Plus size={16} /> Add</button>}</div></div>
           {loading ? <div className="empty-state"><div className="loading-spinner" /><p>Loading your records…</p></div> : visibleEntries.length === 0 ? <div className="empty-state"><div className="empty-icon"><BookOpen size={23} /></div><h3>{search ? 'No matching records' : 'A fresh page'}</h3><p>{search ? 'Try another search term.' : 'Your next step doesn’t have to be big. Add a record to get started.'}</p><button className="primary-btn" onClick={() => openCreate()}><Plus size={17} /> Add your first record</button></div> :
             <div className="entry-list">{visibleEntries.slice(0, activeModule === 'dashboard' ? 8 : 100).map(entry => <EntryRow key={entry.id} entry={entry} onEdit={openEdit} onDelete={deleteEntry} onToggle={toggleComplete} />)}</div>}
